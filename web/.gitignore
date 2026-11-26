@@ -1,0 +1,6 @@
+node_modules
+
+# dist est volontairement versionné (pas besoin de Node pour lancer l'app)
+
+# clés (licence React Bits Pro)
+.env*.local

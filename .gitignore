@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Données locales (sessions, workspace des agents)
+logs/
+
+# Frontend (web/dist est volontairement versionné : pas besoin de Node pour lancer)
+web/node_modules/
+web/.env*.local
+
+# Divers
+.DS_Store
+.env
