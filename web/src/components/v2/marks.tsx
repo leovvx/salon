@@ -1,4 +1,4 @@
-/** Logos des membres : on reconnaît chacun à son glyphe et à sa couleur, pas à une bulle. */
+/** Member logos: each one is recognized by its glyph and color, not by a bubble. */
 import { cn } from "@/lib/utils"
 
 export type Who = "chef" | "A" | "B"
@@ -10,7 +10,7 @@ export const AGENT_COLOR: Record<Who, string> = {
 }
 export const AGENT_DOT: Record<Who, string> = { chef: "bg-zinc-400", A: "bg-violet-500", B: "bg-emerald-500" }
 
-/** Glyphe de A : une étincelle à quatre branches (façon assistant). */
+/** A's glyph: a four-pointed spark (assistant style). */
 function SparkA({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden>
@@ -19,7 +19,7 @@ function SparkA({ className }: { className?: string }) {
     </svg>
   )
 }
-/** Glyphe de B : deux chevrons imbriqués (façon exécutant / terminal). */
+/** B's glyph: nested chevrons (executor / terminal style). */
 function GlyphB({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
@@ -28,13 +28,13 @@ function GlyphB({ className }: { className?: string }) {
   )
 }
 
-/** Le logo d'un membre, à sa couleur. Le chef (humain) garde une pastille avec son initiale. */
+/** A member's logo, in its color. The boss (human) keeps a badge with their initial. */
 export function AgentMark({ who, label, size = 18, className }: { who: Who; label?: string; size?: number; className?: string }) {
   if (who === "chef") {
     return (
       <span className={cn("grid shrink-0 place-items-center rounded-full bg-zinc-200 font-semibold text-zinc-700 dark:bg-zinc-700 dark:text-zinc-100", className)}
         style={{ width: size, height: size, fontSize: size * 0.5 }}>
-        {(label ?? "C").slice(0, 1).toUpperCase()}
+        {(label ?? "B").slice(0, 1).toUpperCase()}
       </span>
     )
   }

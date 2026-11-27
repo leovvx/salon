@@ -1,6 +1,6 @@
 node_modules
 
-# dist est volontairement versionné (pas besoin de Node pour lancer l'app)
+# dist is committed on purpose (no Node needed to run the app)
 
-# clés (licence React Bits Pro)
+# keys (React Bits Pro license)
 .env*.local

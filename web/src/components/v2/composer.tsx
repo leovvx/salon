@@ -1,9 +1,9 @@
 /**
- * Composer façon « AI composer » d'Arc UI (mesures relevées sur la page, code original) :
- * une surface arrondie (r 20, bordure, p 10) avec un textarea 15/22.5 qui grandit jusqu'à ~8 lignes,
- * puis une barre : « + », pastilles bascules (Recherche web, Réflexion longue), à droite la puce « modèle »
- * (ici : à qui tu parles, avec sa marque) qui ouvre un menu avec une rangée d'effort (ici : l'autonomie),
- * et le bouton envoyer muet → flèche → carré stop cerclé de l'anneau de progression.
+ * Composer in the style of Arc UI's "AI composer" (measurements taken from the page, original code):
+ * a rounded surface (r 20, border, p 10) with a 15/22.5 textarea that grows up to ~8 lines,
+ * then a bar: "+", toggle pills (Web search, Deep thinking), and on the right the "model" chip
+ * (here: who you are talking to, with their mark) that opens a menu with an effort row (here: autonomy),
+ * and the send button: muted → arrow → stop square circled by the progress ring.
  */
 import { forwardRef } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
@@ -63,7 +63,7 @@ export const Composer = forwardRef<HTMLTextAreaElement, {
         <div className="flex items-center gap-1.5">
           {/* + */}
           <DropdownMenu>
-            <DropdownMenuTrigger aria-label="Ajouter" className="grid size-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors outline-none hover:bg-neutral-900/[0.05] hover:text-foreground data-[state=open]:bg-neutral-900/[0.05] dark:hover:bg-[oklch(0.28_0_0)] dark:data-[state=open]:bg-[oklch(0.28_0_0)]">
+            <DropdownMenuTrigger aria-label="Add" className="grid size-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors outline-none hover:bg-neutral-900/[0.05] hover:text-foreground data-[state=open]:bg-neutral-900/[0.05] dark:hover:bg-[oklch(0.28_0_0)] dark:data-[state=open]:bg-[oklch(0.28_0_0)]">
               <Plus className="size-[18px]" strokeWidth={1.8} />
             </DropdownMenuTrigger>
             <DropdownMenuContent side="top" align="start" sideOffset={8} className={cn(menuSurface, "min-w-56")}>
@@ -75,17 +75,17 @@ export const Composer = forwardRef<HTMLTextAreaElement, {
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {/* bascules */}
-          <button type="button" aria-pressed={p.web} onClick={() => p.setWeb(!p.web)} title={p.web ? "Les agents peuvent chercher sur le web" : "Web coupé pour les agents"}
+          {/* toggles */}
+          <button type="button" aria-pressed={p.web} onClick={() => p.setWeb(!p.web)} title={p.web ? "Agents can search the web" : "Web disabled for agents"}
             className={cn(chipBase, p.web ? chipOn : chipOff, "max-[560px]:w-8 max-[560px]:justify-center max-[560px]:px-0")}>
-            <Globe className="size-4" strokeWidth={1.8} /><span className="max-[560px]:hidden">Recherche web</span>
+            <Globe className="size-4" strokeWidth={1.8} /><span className="max-[560px]:hidden">Web search</span>
           </button>
-          <button type="button" aria-pressed={p.deep} onClick={() => p.setDeep(!p.deep)} title={p.deep ? "Réflexion à chaque tour" : "Réflexion seulement quand c'est utile"}
+          <button type="button" aria-pressed={p.deep} onClick={() => p.setDeep(!p.deep)} title={p.deep ? "Thinking on every turn" : "Thinking only when useful"}
             className={cn(chipBase, p.deep ? chipOn : chipOff, "max-[560px]:w-8 max-[560px]:justify-center max-[560px]:px-0")}>
-            <Brain className="size-4" strokeWidth={1.8} /><span className="max-[560px]:hidden">Réflexion longue</span>
+            <Brain className="size-4" strokeWidth={1.8} /><span className="max-[560px]:hidden">Deep thinking</span>
           </button>
 
-          {/* puce « modèle » : à qui tu parles */}
+          {/* "model" chip: who you are talking to */}
           <DropdownMenu>
             <DropdownMenuTrigger className="ms-auto inline-flex h-8 min-w-0 items-center gap-1.5 rounded-full pr-2 pl-2.5 text-[13px] outline-none transition-colors hover:bg-neutral-900/[0.05] data-[state=open]:bg-neutral-900/[0.05] dark:hover:bg-[oklch(0.28_0_0)] dark:data-[state=open]:bg-[oklch(0.28_0_0)]">
               <motion.span layout transition={reduce ? { duration: 0 } : morph} className="inline-flex min-w-0 items-center gap-1.5">
@@ -109,8 +109,8 @@ export const Composer = forwardRef<HTMLTextAreaElement, {
               <DropdownMenuSeparator className="my-1.5" />
               <div className="px-2.5 pt-1 pb-1.5">
                 <div className="mb-2 flex items-center justify-between text-[13px]">
-                  <span>Autonomie</span>
-                  <span className="text-muted-foreground tabular-nums">{p.effort} tours sans toi</span>
+                  <span>Autonomy</span>
+                  <span className="text-muted-foreground tabular-nums">{p.effort} turns without you</span>
                 </div>
                 <div className="flex rounded-xl border border-neutral-900/10 p-1 dark:border-[oklch(0.29_0_0)]">
                   {p.efforts.map((e) => (
@@ -144,7 +144,7 @@ export const Composer = forwardRef<HTMLTextAreaElement, {
   )
 })
 
-/** Muet tant qu'il n'y a rien → flèche → carré stop qui scale, cerclé d'un arc qui tourne pendant la réponse. */
+/** Muted while empty → arrow → scaling stop square, circled by an arc that spins during the reply. */
 function SendButton({ running, canSend, onSend, onStop }: { running: boolean; canSend: boolean; onSend: () => void; onStop: () => void }) {
   const reduce = useReducedMotion()
   return (
@@ -160,7 +160,7 @@ function SendButton({ running, canSend, onSend, onStop }: { running: boolean; ca
         )}
       </AnimatePresence>
       <button type="button" onClick={running ? onStop : onSend} aria-disabled={!running && !canSend}
-        aria-label={running ? "Arrêter" : canSend ? "Envoyer le message" : "Rien à envoyer"} title={running ? "Arrêter (Échap)" : "Envoyer (Entrée)"}
+        aria-label={running ? "Stop" : canSend ? "Send message" : "Nothing to send"} title={running ? "Stop (Esc)" : "Send (Enter)"}
         className={cn("relative grid size-8 place-items-center overflow-hidden rounded-full transition-colors duration-150 outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
           running || canSend ? "bg-foreground text-background" : "bg-neutral-900/[0.07] text-muted-foreground dark:bg-[oklch(0.3_0_0)]")}>
         <AnimatePresence mode="popLayout" initial={false}>

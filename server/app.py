@@ -1,12 +1,12 @@
-"""Salon / Ateliers — backend FastAPI.
+"""Salon / Workshops — FastAPI backend.
 
-Un salon de discussion local entre le chef (toi) et deux agents IA qui tournent
-sur Ollama, avec de vrais outils (bash, fichiers, web). Tout est local : aucune
-donnée ne sort de ta machine, à part les appels à ton serveur Ollama.
+A local chat room between the boss (you) and two AI agents running
+on Ollama, with real tools (bash, files, web). Everything is local: no
+data leaves your machine, apart from the calls to your Ollama server.
 
-Lancement :
+Start with:
     python run.py
-ou :
+or:
     uvicorn server.app:app --host 0.0.0.0 --port 8765
 """
 
@@ -22,7 +22,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
-# ---- import du moteur (server/room.py) ----
+# ---- import the engine (server/room.py) ----
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from room import ROOM  # noqa: E402
 
@@ -49,18 +49,18 @@ class SafeJSON(JSONResponse):
         return json.dumps(_clean(jsonable_encoder(content)), ensure_ascii=False).encode()
 
 
-app = FastAPI(default_response_class=SafeJSON, title="Salon / Ateliers")
+app = FastAPI(default_response_class=SafeJSON, title="Salon / Workshops")
 
 
 @app.get("/")
 def index():
     built = DIST / "index.html"
     if not built.exists():
-        raise HTTPException(503, "Interface non buildée : lance `cd web && pnpm install && pnpm build`.")
+        raise HTTPException(503, "UI not built: run `cd web && pnpm install && pnpm build`.")
     return FileResponse(built)
 
 
-# ---------- Ollama : liste des modèles + chat simple ----------
+# ---------- Ollama: model list + simple chat ----------
 @app.get("/api/models")
 async def models():
     try:
@@ -82,7 +82,7 @@ async def chat(req: Request):
             async with httpx.AsyncClient(timeout=None) as c:
                 async with c.stream("POST", f"{OLLAMA}/api/chat", json=payload) as r:
                     if r.status_code != 200 and payload["think"]:
-                        payload["think"] = False  # modèle sans mode réflexion : on réessaie sans
+                        payload["think"] = False  # model without a thinking mode: retry without it
                         async with c.stream("POST", f"{OLLAMA}/api/chat", json=payload) as r2:
                             async for line in r2.aiter_lines():
                                 if line:
@@ -97,7 +97,7 @@ async def chat(req: Request):
     return StreamingResponse(gen(), media_type="text/event-stream")
 
 
-# ---------- Salon à trois (chef + 2 agents) ----------
+# ---------- Three-way salon (boss + 2 agents) ----------
 @app.get("/api/room")
 def room_state():
     return ROOM.snapshot()
@@ -132,7 +132,7 @@ async def room_say(req: Request):
     b = await req.json()
     text = str(b.get("text", "")).strip()
     if not text:
-        raise HTTPException(400, "message vide")
+        raise HTTPException(400, "empty message")
     ROOM.say(text, to=b.get("to") or None)
     return {"ok": True}
 
@@ -185,7 +185,7 @@ async def room_edit(mid: str, req: Request):
     b = await req.json()
     text = str(b.get("text", "")).strip()
     if not text:
-        raise HTTPException(400, "message vide")
+        raise HTTPException(400, "empty message")
     if not ROOM.edit_message(mid, text):
         raise HTTPException(404)
     return {"ok": True}
@@ -204,7 +204,7 @@ def room_reset():
     return ROOM.snapshot()
 
 
-# Fichiers statiques de l'interface (après les routes /api)
+# UI static files (after the /api routes)
 if DIST.exists():
     from fastapi.staticfiles import StaticFiles
     app.mount("/", StaticFiles(directory=DIST), name="web")

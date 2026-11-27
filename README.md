@@ -1,45 +1,45 @@
-# Salon · Ateliers
+# Salon · Workshops
 
-Un **salon de discussion local** où tu travailles avec **deux agents IA** (Abe et Guy)
-qui tournent sur tes propres modèles [Ollama](https://ollama.com). Ils ont de vrais
-outils — shell (bash), lecture/écriture de fichiers, recherche et lecture de pages web —
-et collaborent entre eux pour accomplir ce que tu leur demandes.
+A **local chat room** where you work with **two AI agents** (Abe and Guy)
+running on your own [Ollama](https://ollama.com) models. They have real
+tools — shell (bash), file reading/writing, web search and page reading —
+and work together to get done what you ask them.
 
-Tout est **100 % local** : la seule chose qui sort de ta machine, ce sont les appels à
-ton serveur Ollama (que tu héberges toi-même).
+Everything is **100% local**: the only thing that leaves your machine is the calls to
+your Ollama server (which you host yourself).
 
 ![Salon](web/src/assets/hero.png)
 
 ---
 
-## Deux modes
+## Two modes
 
-- **Ateliers** (par défaut) — chaque agent a son propre canal privé avec toi, plus un
-  « fil » commun entre les deux agents. Tu lances un objectif dans **#général**, les deux
-  agents se répartissent le travail et s'échangent leurs infos dans le fil. Tu peux entrer
-  dans l'atelier de Guy ou d'Abe pour voir ce que chacun fait et réfléchit, ou leur écrire
-  individuellement.
-- **Salon** — un seul canal commun vu par vous trois, comme un salon Discord.
+- **Workshops** (default) — each agent has its own private channel with you, plus a
+  shared "thread" between the two agents. You post a goal in **#general**, the two
+  agents split the work and exchange their findings in the thread. You can step
+  into Guy's or Abe's workshop to see what each one is doing and thinking, or write
+  to them individually.
+- **Salon** — a single shared channel seen by all three of you, like a Discord server.
 
-On change de mode dans les réglages (l'engrenage, en haut à droite).
+Switch modes in the settings (the gear icon, top right).
 
 ---
 
-## Prérequis
+## Requirements
 
-1. **[Ollama](https://ollama.com/download)** installé et lancé, avec au moins un modèle.
-   Un modèle qui gère le raisonnement et les outils marche le mieux, par exemple :
+1. **[Ollama](https://ollama.com/download)** installed and running, with at least one model.
+   A model that handles reasoning and tools works best, for example:
    ```bash
    ollama pull qwen3:4b
    ```
-   (Sur une grosse machine : `qwen3:30b-a3b`, plus intelligent.)
+   (On a powerful machine: `qwen3:30b-a3b`, smarter.)
 2. **[Python 3.10+](https://www.python.org/downloads/)**.
 
-Node.js n'est **pas** nécessaire : l'interface est déjà compilée dans `web/dist/`.
+Node.js is **not** required: the UI is already built in `web/dist/`.
 
 ---
 
-## Démarrage rapide
+## Quick start
 
 ```bash
 git clone https://github.com/leovvx/salon.git
@@ -48,82 +48,82 @@ pip install -r requirements.txt
 python run.py
 ```
 
-Le navigateur s'ouvre sur **http://localhost:8765**. Choisis ton modèle dans les réglages,
-écris un objectif dans **#général**, et c'est parti.
+Your browser opens at **http://localhost:8765**. Pick your model in the settings,
+write a goal in **#general**, and you're off.
 
-> Sous Windows, les commandes sont les mêmes dans **PowerShell** ou l'invite de commandes.
+> On Windows, the commands are the same in **PowerShell** or the Command Prompt.
 
 ---
 
-## Connecter l'app à tes modèles Windows
+## Connecting the app to your Windows models
 
-### Cas 1 — tout sur le même PC Windows
-Ollama et l'app tournent sur la même machine : rien à configurer, `python run.py` suffit.
-Le modèle par défaut se choisit dans les réglages (menu déroulant alimenté par Ollama).
+### Case 1 — everything on the same Windows PC
+Ollama and the app run on the same machine: nothing to configure, `python run.py` is enough.
+The default model is picked in the settings (dropdown fed by Ollama).
 
-### Cas 2 — l'app sur une machine, Ollama sur un autre PC (LAN)
-Par exemple l'app sur le Mac, les modèles sur le PC Windows.
+### Case 2 — the app on one machine, Ollama on another PC (LAN)
+For example the app on the Mac, the models on the Windows PC.
 
-**Sur le PC Windows** (celui qui a Ollama), expose Ollama sur le réseau local en réglant
-la variable d'environnement puis en relançant Ollama :
+**On the Windows PC** (the one running Ollama), expose Ollama on the local network by
+setting the environment variable and then restarting Ollama:
 
-- PowerShell (temporaire) :
+- PowerShell (temporary):
   ```powershell
   $env:OLLAMA_HOST = "0.0.0.0:11434"
   ollama serve
   ```
-- Ou de façon permanente : *Paramètres Windows → Variables d'environnement →*
-  nouvelle variable `OLLAMA_HOST` = `0.0.0.0:11434`, puis redémarrer Ollama.
+- Or permanently: *Windows Settings → Environment variables →*
+  new variable `OLLAMA_HOST` = `0.0.0.0:11434`, then restart Ollama.
 
-Trouve l'IP locale du PC Windows avec `ipconfig` (ligne « Adresse IPv4 », ex. `192.168.1.42`).
+Find the Windows PC's local IP with `ipconfig` (the "IPv4 Address" line, e.g. `192.168.1.42`).
 
-**Sur la machine qui lance l'app**, pointe vers ce PC :
+**On the machine running the app**, point to that PC:
 ```bash
 OLLAMA_HOST=http://192.168.1.42:11434 python run.py
 ```
-ou copie `.env.example` en `.env` et mets-y l'adresse (voir ci-dessous).
+or copy `.env.example` to `.env` and put the address in it (see below).
 
-> Pense à autoriser le port **11434** dans le pare-feu Windows si la connexion est bloquée.
+> Remember to allow port **11434** in the Windows firewall if the connection is blocked.
 
 ---
 
-## Configuration (facultatif)
+## Configuration (optional)
 
-Copie `.env.example` en `.env` et adapte :
+Copy `.env.example` to `.env` and adjust:
 
-| Variable       | Rôle                                        | Défaut                   |
+| Variable       | Purpose                                     | Default                  |
 |----------------|---------------------------------------------|--------------------------|
-| `OLLAMA_HOST`  | Adresse du serveur Ollama                   | `http://localhost:11434` |
-| `OLLAMA_MODEL` | Modèle par défaut des agents                | `qwen3:4b`               |
-| `PORT`         | Port de l'interface web                     | `8765`                   |
+| `OLLAMA_HOST`  | Ollama server address                       | `http://localhost:11434` |
+| `OLLAMA_MODEL` | Default model for the agents                | `qwen3:4b`               |
+| `PORT`         | Web UI port                                 | `8765`                   |
 
-Le modèle reste modifiable à tout moment dans les réglages de l'interface.
-
----
-
-## Ce que tu peux régler dans l'interface
-
-- **Modèle** de chaque agent (Abe / Guy).
-- **Mode** Ateliers / Salon.
-- **Validation des actions** : bash et écriture de fichiers peuvent demander ton accord.
-- **Tours automatiques** : combien d'échanges les agents enchaînent sans toi.
-- **Mémoire** (`num_ctx`) : la discussion se **compacte automatiquement** quand elle
-  approche de la limite (le modèle en fait un résumé pour ne pas perdre le fil).
-- Les sessions sont **sauvegardées** et rechargeables.
-
-Les fichiers créés par les agents vivent dans `logs/room/workspace/` (ignoré par git).
+The model can be changed at any time in the UI settings.
 
 ---
 
-## Développer l'interface
+## What you can tweak in the UI
 
-Pour modifier le front (React + Vite + Tailwind) :
+- **Model** for each agent (Abe / Guy).
+- **Mode**: Workshops / Salon.
+- **Action approval**: bash and file writes can ask for your OK.
+- **Auto turns**: how many exchanges the agents chain without you.
+- **Memory** (`num_ctx`): the discussion is **compacted automatically** when it
+  nears the limit (the model writes a summary so it doesn't lose track).
+- Sessions are **saved** and can be reloaded.
+
+Files created by the agents live in `logs/room/workspace/` (ignored by git).
+
+---
+
+## Developing the UI
+
+To work on the front end (React + Vite + Tailwind):
 
 ```bash
 cd web
 pnpm install
-pnpm dev     # serveur de dev sur http://localhost:5173, proxy /api vers :8765
-pnpm build   # régénère web/dist/ servi par le backend
+pnpm dev     # dev server at http://localhost:5173, proxies /api to :8765
+pnpm build   # regenerates web/dist/, served by the backend
 ```
 
 ---
@@ -131,11 +131,11 @@ pnpm build   # régénère web/dist/ servi par le backend
 ## Architecture
 
 ```
-run.py            lanceur (charge .env, démarre uvicorn, ouvre le navigateur)
+run.py            launcher (loads .env, starts uvicorn, opens the browser)
 server/
-  app.py          API FastAPI : /api/room/*, /api/chat, /api/models + sert web/dist
-  room.py         le moteur du salon (agents, outils, tours, compaction)
-web/              interface React (source) + web/dist (compilée, versionnée)
+  app.py          FastAPI API: /api/room/*, /api/chat, /api/models + serves web/dist
+  room.py         the salon engine (agents, tools, turns, compaction)
+web/              React UI (source) + web/dist (built, committed)
 ```
 
-Le moteur n'a besoin que de la bibliothèque standard Python + `httpx`.
+The engine only needs the Python standard library + `httpx`.

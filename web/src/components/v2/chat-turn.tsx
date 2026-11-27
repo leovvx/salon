@@ -1,11 +1,11 @@
 /**
- * Tour d'agent façon « AI chat » d'Arc UI (comportement et mesures relevés sur la page, code original) :
- * - pas de bulle : la réponse est du texte, 15/24 ;
- * - l'agent se reconnaît à sa marque colorée, posée sur la ligne « Réfléchi pendant 4 s › » (13 px, gris) ;
- * - la pensée se déplie en dessous, 13/20.8, indentée de 16 px avec un filet ;
- * - chaque outil est une pastille arrondie (h 30, bordure, fond légèrement levé) : icône, libellé, marques des sites, compteur ;
- * - la réponse en cours s'écrit mot par mot, chaque morceau en fondu 160 ms ;
- * - actions sous la réponse : copier, répondre, relancer.
+ * Agent turn in the style of Arc UI's "AI chat" (behavior and measurements taken from the page, original code):
+ * - no bubble: the reply is plain text, 15/24;
+ * - the agent is recognized by its colored mark, placed on the "Thought for 4 s ›" line (13 px, gray);
+ * - the thought unfolds below, 13/20.8, indented 16 px with a rule;
+ * - each tool is a rounded pill (h 30, border, slightly raised background): icon, label, site marks, counter;
+ * - the reply in progress is written word by word, each chunk fading in over 160 ms;
+ * - actions under the reply: copy, reply, retry.
  */
 import { useEffect, useRef, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
@@ -20,10 +20,10 @@ import { AGENT_COLOR, AgentMark, type Who } from "./marks"
 
 const LEAK_START = /^\s*(<think>|okay\b|ok,|alright|let me|let's|first,|hmm|so,|wait|the user|i need|i should|je dois|bon,|d'accord|alors,|voyons|l'utilisateur)/i
 
-/** Sépare une pensée « fuitée » dans le texte (« … </think> réponse »). */
+/** Splits off a thought that "leaked" into the text ("… </think> answer"). */
 export function splitThink(text: string): { thought: string; answer: string } {
   if (!text.includes("</think>")) {
-    // pensée coupée avant </think> (anciens messages) : un long texte qui commence comme un raisonnement
+    // thought cut off before </think> (older messages): a long text that starts like reasoning
     if (text.length > 400 && LEAK_START.test(text)) return { thought: text.replace("<think>", "").trim(), answer: "" }
     return { thought: "", answer: text.replace(/^\s*<think>\s*/, "") }
   }
@@ -31,9 +31,9 @@ export function splitThink(text: string): { thought: string; answer: string } {
   return { thought: text.slice(0, i).replace("<think>", "").trim(), answer: text.slice(i + 8).trim() }
 }
 
-/* ---------------- ligne d'en-tête : marque + nom + « Réfléchi pendant 4 s › » ---------------- */
+/* ---------------- header line: mark + name + "Thought for 4 s ›" ---------------- */
 
-/** Marque + nom, à poser devant « Réfléchi › » sur la même ligne. */
+/** Mark + name, placed before "Thought ›" on the same line. */
 export function HeadLead({ who, name }: { who: Who; name: string }) {
   return (
     <span className="inline-flex shrink-0 items-center gap-1.5">
@@ -55,14 +55,14 @@ export function TurnHead({ who, name, time, children }: { who: Who; name: string
   )
 }
 
-/** « Réfléchi pendant 4 s › » qui déplie la pensée ; « Réfléchit… » scintillant pendant qu'elle s'écrit. */
+/** "Thought for 4 s ›" unfolds the thought; a shimmering "Thinking…" while it is being written. */
 export function ThoughtToggle({ text, secs, live, summary, lead }: { text: string; secs?: number; live?: boolean; summary?: string | null; lead?: React.ReactNode }) {
-  // en direct, la pensée s'écrit dépliée ; elle se replie dès que la réponse commence
+  // live, the thought is written unfolded; it folds as soon as the reply starts
   const [open, setOpen] = useState(!!live)
   useEffect(() => { setOpen(!!live) }, [live])
   const scroller = useRef<HTMLDivElement>(null)
   useEffect(() => { if (live && scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight }, [live, text])
-  const label = live ? "Réfléchit" : secs ? `Réfléchi pendant ${fmtDur(secs)}` : "Réfléchi"
+  const label = live ? "Thinking" : secs ? `Thought for ${fmtDur(secs)}` : "Thought"
   return (
     <div>
       <div className="flex min-h-7 min-w-0 items-center gap-1.5">
@@ -83,22 +83,22 @@ export function ThoughtToggle({ text, secs, live, summary, lead }: { text: strin
   )
 }
 
-/* ---------------- pastilles d'outils ---------------- */
+/* ---------------- tool pills ---------------- */
 
 export type PillData = {
   id: string
   icon: "search" | "fetch" | "read"
-  label: string        // « A cherché sur le web »
-  liveLabel: string    // « Cherche sur le web »
-  meta?: string        // « 4 sources »
+  label: string        // "Searched the web"
+  liveLabel: string    // "Searching the web"
+  meta?: string        // "4 sources"
   running?: boolean
   sources?: Source[]
-  detail?: string      // la requête / l'URL
+  detail?: string      // the query / the URL
   output?: string
 }
 const PILL_ICON = { search: Search, fetch: Globe, read: FileText }
 
-/** Plusieurs recherches d'un même tour se fondent en une seule pastille, comme « Searched the web · 4 sources ». */
+/** Several searches in the same turn merge into one pill, like "Searched the web · 4 sources". */
 export function ToolPills({ pills }: { pills: PillData[] }) {
   const [open, setOpen] = useState<string | null>(null)
   const reduce = useReducedMotion()
@@ -137,7 +137,7 @@ export function ToolPills({ pills }: { pills: PillData[] }) {
   )
 }
 
-/** Construit les pastilles web d'un tour : toutes les recherches en une, chaque page lue en une. */
+/** Builds a turn's web pills: all searches in one, one per page read. */
 export function webPills(tools: { id: string; name: string; args: Record<string, unknown>; state: string; sources?: Source[]; output?: string }[]): PillData[] {
   const out: PillData[] = []
   const searches = tools.filter((t) => t.name === "web_search")
@@ -145,22 +145,22 @@ export function webPills(tools: { id: string; name: string; args: Record<string,
     const src = dedupe(searches.flatMap((t) => t.sources ?? []))
     const running = searches.some((t) => t.state === "running")
     out.push({ id: "search-" + searches[0].id, icon: "search", running,
-      liveLabel: "Recherche sur le web", label: "A cherché sur le web",
+      liveLabel: "Searching the web", label: "Searched the web",
       meta: src.length ? plural(src.length, "1 source", "# sources") : undefined, sources: src,
-      detail: searches.map((t) => `« ${String(t.args.query ?? "")} »`).join(" · "),
+      detail: searches.map((t) => `"${String(t.args.query ?? "")}"`).join(" · "),
       output: src.length ? undefined : searches.map((t) => t.output ?? "").join("\n\n") })
   }
   for (const t of tools.filter((x) => x.name === "web_fetch")) {
     const u = String(t.args.url ?? "")
-    out.push({ id: t.id, icon: "fetch", running: t.state === "running", liveLabel: `Lit ${host(u)}`, label: `A lu ${host(u)}`,
+    out.push({ id: t.id, icon: "fetch", running: t.state === "running", liveLabel: `Reading ${host(u)}`, label: `Read ${host(u)}`,
       sources: u ? [{ url: u, title: t.sources?.[0]?.title }] : [], detail: u, output: t.output })
   }
   return out
 }
 
-/* ---------------- réponse ---------------- */
+/* ---------------- reply ---------------- */
 
-/** Réponse sans bulle. Pendant le flux : fondu par mot sur 160 ms. */
+/** Reply without a bubble. While streaming: per-word fade over 160 ms. */
 export function Answer({ text, streaming, className }: { text: string; streaming?: boolean; className?: string }) {
   return (
     <div className={cn("text-[15px]/[24px] [overflow-wrap:anywhere] [&_p]:my-2.5 [&_li]:my-1", className)}>
@@ -171,23 +171,23 @@ export function Answer({ text, streaming, className }: { text: string; streaming
   )
 }
 
-/** Actions sous une réponse (icônes 30 px, grises). */
+/** Actions under a reply (30 px gray icons). */
 export function AnswerActions({ text, onReply, onRetry }: { text: string; onReply?: () => void; onRetry?: () => void }) {
   const [copied, setCopied] = useState(false)
   useEffect(() => { if (!copied) return; const t = setTimeout(() => setCopied(false), 1400); return () => clearTimeout(t) }, [copied])
   const btn = "grid size-[30px] place-items-center rounded-[10px] text-muted-foreground transition-colors hover:bg-neutral-900/[0.05] hover:text-foreground dark:hover:bg-neutral-100/[0.06]"
   return (
     <div className="-ms-1.5 mt-1 flex items-center opacity-0 transition-opacity group-hover/turn:opacity-100 focus-within:opacity-100">
-      <button type="button" aria-label="Copier" title="Copier" className={btn}
-        onClick={() => { navigator.clipboard.writeText(text); setCopied(true); toast("Copié") }}>
+      <button type="button" aria-label="Copy" title="Copy" className={btn}
+        onClick={() => { navigator.clipboard.writeText(text); setCopied(true); toast("Copied") }}>
         <AnimatePresence mode="popLayout" initial={false}>
           <motion.span key={copied ? "ok" : "cp"} initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.6, opacity: 0 }} transition={{ duration: 0.14 }}>
             {copied ? <Check className="size-4" /> : <Copy className="size-4" strokeWidth={1.8} />}
           </motion.span>
         </AnimatePresence>
       </button>
-      {onReply && <button type="button" aria-label="Répondre" title="Répondre (@mention)" className={btn} onClick={onReply}><CornerUpLeft className="size-4" strokeWidth={1.8} /></button>}
-      {onRetry && <button type="button" aria-label="Relancer" title="Le faire reparler" className={btn} onClick={onRetry}><RotateCw className="size-4" strokeWidth={1.8} /></button>}
+      {onReply && <button type="button" aria-label="Reply" title="Reply (@mention)" className={btn} onClick={onReply}><CornerUpLeft className="size-4" strokeWidth={1.8} /></button>}
+      {onRetry && <button type="button" aria-label="Retry" title="Make it speak again" className={btn} onClick={onRetry}><RotateCw className="size-4" strokeWidth={1.8} /></button>}
     </div>
   )
 }

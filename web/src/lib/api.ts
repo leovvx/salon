@@ -63,7 +63,7 @@ export const post = async <T,>(url: string, body?: unknown): Promise<T> =>
     })
   ).json()
 
-/** Lit un flux SSE `data: …` depuis un POST. */
+/** Reads an SSE `data: …` stream from a POST. */
 export async function* sse(res: Response) {
   const rd = res.body!.getReader()
   const dec = new TextDecoder()
