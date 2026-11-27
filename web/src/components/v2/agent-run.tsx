@@ -1,12 +1,12 @@
 /**
- * Agent run V2 — une carte qui suit un agent pendant un tour.
- * Inspiré du bloc « Agent run » d'Arc UI (comportement observé, code original) :
- * - les étapes arrivent en ouvrant leur hauteur sur un ressort amorti (sans rebond) ;
- * - le verbe en cours scintille, puis passe au passé en fondu (100 ms out, 160 ms in depuis 2 px) ;
- * - la coche se dessine une fois ; le statut d'en-tête suit le même fondu ; chrono en chiffres tabulaires ;
- * - une étape d'outil s'ouvre sur place (entrée / sortie en mono) ;
- * - l'agent s'arrête sur une validation (Autoriser / Refuser avec une note) ;
- * - à la fin, les étapes se replient en une ligne et les sources apparaissent dessous.
+ * Agent run V2 — a card that follows an agent during one turn.
+ * Inspired by Arc UI's "Agent run" block (observed behavior, original code):
+ * - steps arrive by opening their height on a damped spring (no bounce);
+ * - the current verb shimmers, then crossfades to the past tense (100 ms out, 160 ms in from 2 px);
+ * - the check mark draws itself once; the header status uses the same fade; timer in tabular digits;
+ * - a tool step expands in place (input / output in mono);
+ * - the agent pauses on an approval (Allow / Deny with a note);
+ * - at the end, the steps fold into one line and the sources appear below.
  */
 import { memo, useEffect, useId, useLayoutEffect, useRef, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
@@ -22,21 +22,21 @@ export type Mark = "think" | "read" | "search" | "fetch" | "terminal" | "write" 
 export type RunStep = {
   id: string
   mark: Mark
-  verb: string          // en cours : « Cherche »
-  doneVerb: string      // fini : « A cherché »
-  target?: string       // « rate limit middleware »
+  verb: string          // in progress: "Searching"
+  doneVerb: string      // finished: "Searched"
+  target?: string       // "rate limit middleware"
   status: "running" | "waiting" | "done" | "denied"
   secs?: number
-  meta?: string         // « 5 résultats »
+  meta?: string         // "5 results"
   sources?: Source[]
   io?: { input?: string; output?: string; lang?: "bash" | "text" }
-  body?: React.ReactNode // contenu déplié personnalisé
+  body?: React.ReactNode // custom expanded content
   approval?: { kind: "bash" | "write"; path?: string; content?: string; cmd?: string; onApprove: () => void; onReject: (reason: string) => void }
   reason?: string
 }
 export type RunStatus = "working" | "waiting" | "done"
 
-const spring = { type: "spring", stiffness: 520, damping: 46, mass: 1 } as const // amorti critique, pas de rebond
+const spring = { type: "spring", stiffness: 520, damping: 46, mass: 1 } as const // critically damped, no bounce
 const swapOut = { duration: 0.1, ease: [0.4, 0, 1, 1] } as const
 const swapIn = { duration: 0.16, ease: [0, 0, 0.2, 1] } as const
 
@@ -46,10 +46,10 @@ const ICONS: Record<Mark, typeof Search> = {
 }
 
 /* ------------------------------------------------------------------ */
-/* petites briques                                                     */
+/* small building blocks                                              */
 /* ------------------------------------------------------------------ */
 
-/** Change de texte en fondu ; la largeur suit la mesure du nouveau texte. */
+/** Crossfades text; the width follows the measured new text. */
 export function Swap({ k, children, className }: { k: string; children: React.ReactNode; className?: string }) {
   const reduce = useReducedMotion()
   const ref = useRef<HTMLSpanElement>(null)
@@ -69,7 +69,7 @@ export function Swap({ k, children, className }: { k: string; children: React.Re
   )
 }
 
-/** Coche qui dessine son trait une seule fois. */
+/** Check mark that draws its stroke only once. */
 export function DrawnCheck({ className }: { className?: string }) {
   const reduce = useReducedMotion()
   return (
@@ -80,7 +80,7 @@ export function DrawnCheck({ className }: { className?: string }) {
   )
 }
 
-/** Ouvre/ferme en hauteur sur le ressort amorti. */
+/** Opens/closes in height on the damped spring. */
 export function Reveal({ open, children, className }: { open: boolean; children: React.ReactNode; className?: string }) {
   const reduce = useReducedMotion()
   return (
@@ -96,7 +96,7 @@ export function Reveal({ open, children, className }: { open: boolean; children:
   )
 }
 
-/** Pile de favicons + compteur, façon « 9 sur 11 sources lues ». */
+/** Favicon stack + counter, like "9 of 11 sources read". */
 export function SourceStack({ sources, max = 5, label }: { sources: Source[]; max?: number; label?: string }) {
   const uniq = dedupe(sources)
   if (!uniq.length) return null
@@ -118,7 +118,7 @@ export function dedupe(src: Source[]) {
   return src.filter((s) => { const h = host(s.url); if (!s.url || seen.has(h)) return false; seen.add(h); return true })
 }
 
-/** Liste des sources consultées : pastille par site, survol = titre + extrait. */
+/** List of consulted sources: one pill per site, hover = title + snippet. */
 export function SourcesList({ sources }: { sources: Source[] }) {
   const uniq = dedupe(sources)
   return (
@@ -136,7 +136,7 @@ export function SourcesList({ sources }: { sources: Source[] }) {
   )
 }
 
-/** Chrono qui tourne seulement pendant le travail. */
+/** Timer that only runs while working. */
 function useClock(startTs: number | undefined, endTs: number | undefined, ticking: boolean) {
   const [now, setNow] = useState(() => Date.now() / 1000)
   useEffect(() => {
@@ -149,7 +149,7 @@ function useClock(startTs: number | undefined, endTs: number | undefined, tickin
 }
 
 /* ------------------------------------------------------------------ */
-/* étape                                                               */
+/* step                                                                */
 /* ------------------------------------------------------------------ */
 
 const StepRow = memo(function StepRow({ s }: { s: RunStep }) {
@@ -159,10 +159,10 @@ const StepRow = memo(function StepRow({ s }: { s: RunStep }) {
   const Icon = s.status === "waiting" ? FileDiff : ICONS[s.mark]
   const live = s.status === "running"
   const canOpen = !!(s.io?.input || s.io?.output || s.body || (s.sources && s.sources.length))
-  const verb = s.status === "denied" ? "Refusé" : s.status === "waiting" ? (s.approval?.kind === "bash" ? "Valider la commande" : "Valider l'écriture de") : live ? s.verb : s.doneVerb
+  const verb = s.status === "denied" ? "Denied" : s.status === "waiting" ? (s.approval?.kind === "bash" ? "Approve command" : "Approve writing") : live ? s.verb : s.doneVerb
   const label = (
     <span className="flex min-w-0 items-baseline gap-1.5">
-      {/* verbe : scintille au présent, puis crossfade au passé (100 ms out / 160 ms in, largeur suivie) */}
+      {/* verb: shimmers in the present, then crossfades to the past (100 ms out / 160 ms in, width tracked) */}
       <Swap k={verb} className={cn("shrink-0 font-medium", s.status === "waiting" ? "text-foreground" : live ? "text-foreground" : "text-muted-foreground")}>
         {live ? <Shimmer as="span" duration={1.5} spread={2.5}>{verb}</Shimmer> : <span>{verb}</span>}
       </Swap>
@@ -180,7 +180,7 @@ const StepRow = memo(function StepRow({ s }: { s: RunStep }) {
         onClick={() => setOpen((o) => !o)}
         className={cn("group/step relative flex w-full items-center gap-2.5 rounded-lg px-2 py-[6px] text-left text-[13px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50",
           live ? "bg-neutral-900/[0.045] dark:bg-neutral-100/[0.05]" : "enabled:hover:bg-neutral-900/[0.03] dark:enabled:hover:bg-neutral-100/[0.03]")}>
-        {/* la tâche en cours : liseré accentué qui pulse sur le bord gauche */}
+        {/* the current task: accent stripe pulsing on the left edge */}
         {live && <motion.span aria-hidden className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-sky-400"
           animate={reduce ? {} : { opacity: [0.35, 1, 0.35] }} transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }} />}
         <span className="relative grid size-3.5 shrink-0 place-items-center">
@@ -199,12 +199,12 @@ const StepRow = memo(function StepRow({ s }: { s: RunStep }) {
         </span>
         <ChevronDown className={cn("size-3.5 shrink-0 text-muted-foreground transition-[transform,opacity] duration-200", open && "rotate-180", !canOpen && "opacity-0")} />
       </button>
-      {s.status === "denied" && s.reason && <p className="pb-1 pl-7 text-[12px] text-red-400/90">Renvoyé : {s.reason}</p>}
+      {s.status === "denied" && s.reason && <p className="pb-1 pl-7 text-[12px] text-red-400/90">Sent back: {s.reason}</p>}
       <Reveal open={open && canOpen}>
         <div id={panelId} className="pb-2 pl-7 pr-1">
           {s.body}
-          {s.io?.input && <Mono label="entrée">{s.io.input}</Mono>}
-          {s.io?.output && <Mono label="sortie">{s.io.output}</Mono>}
+          {s.io?.input && <Mono label="input">{s.io.input}</Mono>}
+          {s.io?.output && <Mono label="output">{s.io.output}</Mono>}
           {s.sources && s.sources.length > 0 && <div className="mt-1.5"><SourcesList sources={s.sources} /></div>}
         </div>
       </Reveal>
@@ -223,7 +223,7 @@ function Mono({ label, children }: { label: string; children: string }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* validation : diff façon unifié + Autoriser / Refuser avec note       */
+/* approval: unified-style diff + Allow / Deny with a note             */
 /* ------------------------------------------------------------------ */
 
 function Approval({ a, target }: { a: NonNullable<RunStep["approval"]>; target?: string }) {
@@ -235,7 +235,7 @@ function Approval({ a, target }: { a: NonNullable<RunStep["approval"]>; target?:
       <div className="overflow-hidden rounded-lg border border-neutral-900/10 dark:border-neutral-100/10">
         <div className="flex items-center gap-2 border-b border-neutral-900/8 px-2 py-1.5 dark:border-neutral-100/10">
           <span className="rounded-md bg-neutral-900/[0.05] px-2 py-0.5 font-mono text-[12px] dark:bg-neutral-100/[0.07]">
-            {a.kind === "write" ? (a.path?.split("/").pop() ?? "fichier") : "terminal"}
+            {a.kind === "write" ? (a.path?.split("/").pop() ?? "file") : "terminal"}
           </span>
           {a.kind === "write" && <span className="font-mono text-[12px] text-emerald-500">+{lines.length}</span>}
           {a.kind === "write" && a.path && <span className="ms-auto truncate text-[11px] text-muted-foreground" title={a.path}>{a.path}</span>}
@@ -245,7 +245,7 @@ function Approval({ a, target }: { a: NonNullable<RunStep["approval"]>; target?:
             <div key={i} className={cn("flex", a.kind === "write" ? "bg-emerald-500/[0.09]" : "bg-neutral-900/[0.02] dark:bg-neutral-100/[0.02]")}>
               <span className="w-9 shrink-0 pr-2 text-right text-muted-foreground/60 select-none">{i + 1}</span>
               {a.kind === "write" && <span aria-hidden className="w-4 shrink-0 text-emerald-500 select-none">+</span>}
-              <span className="sr-only">{a.kind === "write" ? "Ajouté : " : ""}</span>
+              <span className="sr-only">{a.kind === "write" ? "Added: " : ""}</span>
               <span className="pr-3 whitespace-pre">{l || " "}</span>
             </div>
           ))}
@@ -256,20 +256,20 @@ function Approval({ a, target }: { a: NonNullable<RunStep["approval"]>; target?:
           {note === null ? (
             <motion.div key="btns" className="flex flex-wrap items-center justify-end gap-1.5"
               initial={{ opacity: 0, y: 2 }} animate={{ opacity: 1, y: 0, transition: swapIn }} exit={{ opacity: 0, transition: swapOut }}>
-              <span className="me-auto flex items-center gap-1.5 text-[12px] text-amber-600 dark:text-amber-400"><Hand className="size-3.5" />attend ton accord</span>
+              <span className="me-auto flex items-center gap-1.5 text-[12px] text-amber-600 dark:text-amber-400"><Hand className="size-3.5" />waiting for your approval</span>
               <button ref={rejectRef} type="button" onClick={() => setNote("")}
-                className="h-7 rounded-md border border-neutral-900/10 px-3 text-[12px] hover:bg-neutral-900/[0.04] max-[520px]:flex-1 dark:border-neutral-100/12 dark:hover:bg-neutral-100/[0.05]">Refuser</button>
+                className="h-7 rounded-md border border-neutral-900/10 px-3 text-[12px] hover:bg-neutral-900/[0.04] max-[520px]:flex-1 dark:border-neutral-100/12 dark:hover:bg-neutral-100/[0.05]">Deny</button>
               <button type="button" onClick={a.onApprove}
-                className="h-7 rounded-md bg-foreground px-3 text-[12px] font-medium text-background hover:opacity-90 max-[520px]:flex-1">Autoriser</button>
+                className="h-7 rounded-md bg-foreground px-3 text-[12px] font-medium text-background hover:opacity-90 max-[520px]:flex-1">Allow</button>
             </motion.div>
           ) : (
             <motion.form key="note" className="flex items-center gap-1.5"
               initial={{ opacity: 0, y: 2 }} animate={{ opacity: 1, y: 0, transition: swapIn }} exit={{ opacity: 0, transition: swapOut }}
               onSubmit={(e) => { e.preventDefault(); a.onReject(note) }}>
-              <input autoFocus value={note} onChange={(e) => setNote(e.target.value)} placeholder="Pourquoi ? (l'agent reçoit ta note)"
+              <input autoFocus value={note} onChange={(e) => setNote(e.target.value)} placeholder="Why? (the agent gets your note)"
                 onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); setNote(null); requestAnimationFrame(() => rejectRef.current?.focus()) } }}
                 className="h-7 min-w-0 flex-1 rounded-md border border-neutral-900/10 bg-transparent px-2.5 text-[12px] outline-none focus:border-neutral-900/25 dark:border-neutral-100/12 dark:focus:border-neutral-100/25" />
-              <button type="submit" className="h-7 rounded-md bg-red-500/90 px-3 text-[12px] font-medium text-white hover:bg-red-500">Renvoyer</button>
+              <button type="submit" className="h-7 rounded-md bg-red-500/90 px-3 text-[12px] font-medium text-white hover:bg-red-500">Send back</button>
             </motion.form>
           )}
         </AnimatePresence>
@@ -279,7 +279,7 @@ function Approval({ a, target }: { a: NonNullable<RunStep["approval"]>; target?:
 }
 
 /* ------------------------------------------------------------------ */
-/* carte                                                               */
+/* card                                                                */
 /* ------------------------------------------------------------------ */
 
 export function AgentRun({
@@ -292,9 +292,9 @@ export function AgentRun({
   steps: RunStep[]
   startTs?: number
   endTs?: number
-  live?: React.ReactNode        // contenu en direct (réponse qui s'écrit…)
+  live?: React.ReactNode        // live content (reply being written…)
   sources?: Source[]
-  summary?: string              // ligne repliée : « Réfléchi 2 min, 3 recherches »
+  summary?: string              // folded line: "Thought for 2 min, 3 searches"
   onStop?: () => void
 }) {
   const elapsed = useClock(startTs, endTs, status === "working")
@@ -304,17 +304,17 @@ export function AgentRun({
   const folded = status === "done" && !unfold
   const uniq = dedupe(sources)
   const statusEl =
-    status === "working" ? { k: "w", el: <><span className="size-1.5 animate-pulse rounded-full bg-sky-400" /><Shimmer as="span" duration={1.6}>Travaille</Shimmer></> }
-      : status === "waiting" ? { k: "a", el: <><Hand className="size-3.5 text-amber-500" />T'attend</> }
-        : { k: "d", el: <><DrawnCheck />Terminé</> }
+    status === "working" ? { k: "w", el: <><span className="size-1.5 animate-pulse rounded-full bg-sky-400" /><Shimmer as="span" duration={1.6}>Working</Shimmer></> }
+      : status === "waiting" ? { k: "a", el: <><Hand className="size-3.5 text-amber-500" />Waiting for you</> }
+        : { k: "d", el: <><DrawnCheck />Done</> }
   return (
-    <section aria-label={typeof title === "string" ? title : "Tour d'agent"}
+    <section aria-label={typeof title === "string" ? title : "Agent turn"}
       className="my-1 w-full max-w-[720px] overflow-hidden rounded-xl border border-neutral-900/8 bg-neutral-900/[0.015] dark:border-neutral-100/10 dark:bg-neutral-100/[0.02]">
       <header className="flex items-center gap-2 px-3 pt-2.5 pb-2">
         {avatar}
         <span className="min-w-0 truncate text-[13px] font-medium">{title}</span>
         {model && <span className="hidden truncate text-[12px] text-muted-foreground sm:inline">{model}</span>}
-        {/* tâche en cours, toujours visible pendant le travail : « Cherche rate limit… » qui scintille */}
+        {/* current task, always visible while working: a shimmering "Searching rate limit…" */}
         {current && status === "working" && (
           <span className="ms-auto hidden min-w-0 items-center gap-1.5 text-[12px] sm:flex">
             <Swap k={current.verb + (current.target ?? "")}>
@@ -326,14 +326,14 @@ export function AgentRun({
           <Swap k={statusEl.k} className="text-foreground/80">{statusEl.el}</Swap>
           {(elapsed >= 0.5 || status !== "done") && <span className="w-10 text-right tabular-nums">{fmtClock(elapsed)}</span>}
           {status === "working" && onStop && (
-            <button type="button" onClick={onStop} title="Arrêter" className="grid size-6 place-items-center rounded-md hover:bg-neutral-900/[0.05] dark:hover:bg-neutral-100/[0.06]">
+            <button type="button" onClick={onStop} title="Stop" className="grid size-6 place-items-center rounded-md hover:bg-neutral-900/[0.05] dark:hover:bg-neutral-100/[0.06]">
               <span className="size-2 rounded-[1px] bg-current" />
             </button>
           )}
         </span>
       </header>
 
-      {/* ligne repliée en fin de tour */}
+      {/* folded line at the end of the turn */}
       <AnimatePresence initial={false}>
         {status === "done" && (
           <motion.button type="button" key="fold" onClick={() => setUnfold((u) => !u)} aria-expanded={unfold}
@@ -348,11 +348,11 @@ export function AgentRun({
       </AnimatePresence>
 
       <Reveal open={!folded}>
-        <ol aria-label="Étapes" className="border-t border-neutral-900/6 px-2 py-1.5 dark:border-neutral-100/8">
+        <ol aria-label="Steps" className="border-t border-neutral-900/6 px-2 py-1.5 dark:border-neutral-100/8">
           {steps.map((s) => <StepRow key={s.id} s={s} />)}
           {steps.length === 0 && status !== "done" && (
             <li className="flex items-center gap-2.5 px-1 py-[5px] text-[13px]">
-              <Sparkles className="size-3.5 text-muted-foreground" strokeWidth={1.8} /><Shimmer as="span" duration={1.6}>Se met au travail…</Shimmer>
+              <Sparkles className="size-3.5 text-muted-foreground" strokeWidth={1.8} /><Shimmer as="span" duration={1.6}>Getting to work…</Shimmer>
             </li>
           )}
         </ol>
@@ -364,7 +364,7 @@ export function AgentRun({
 
       <Reveal open={status === "done" && uniq.length > 0}>
         <div className="border-t border-neutral-900/6 px-3 pt-2 pb-2.5 dark:border-neutral-100/8">
-          <div className="mb-1.5 text-[11px] tracking-wider text-muted-foreground uppercase">Sources consultées</div>
+          <div className="mb-1.5 text-[11px] tracking-wider text-muted-foreground uppercase">Sources consulted</div>
           <SourcesList sources={uniq} />
         </div>
       </Reveal>

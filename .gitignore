@@ -4,13 +4,13 @@ __pycache__/
 .venv/
 venv/
 
-# Données locales (sessions, workspace des agents)
+# Local data (sessions, agents' workspace)
 logs/
 
-# Frontend (web/dist est volontairement versionné : pas besoin de Node pour lancer)
+# Frontend (web/dist is committed on purpose: no Node needed to run)
 web/node_modules/
 web/.env*.local
 
-# Divers
+# Misc
 .DS_Store
 .env

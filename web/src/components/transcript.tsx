@@ -14,13 +14,13 @@ export const fadeUp = {
   transition: { duration: 0.28, ease: [0.22, 1, 0.36, 1] },
 } as const
 
-/** Une bulle de transcript (Inspect/Petri ou chat), rendue avec AI Elements. */
+/** A transcript bubble (Inspect/Petri or chat), rendered with AI Elements. */
 export function Bubble({ m, streaming, label }: { m: Msg; streaming?: boolean; label?: string }) {
   if (m.role === "tool")
     return (
       <motion.div {...fadeUp}>
         <Tool>
-          <ToolHeader type="dynamic-tool" toolName={m.function || "tool"} title={`résultat · ${m.function || "tool"}`}
+          <ToolHeader type="dynamic-tool" toolName={m.function || "tool"} title={`result · ${m.function || "tool"}`}
             state={m.error ? "output-error" : "output-available"} />
           <ToolContent>
             <ToolOutput output={m.text} errorText={m.error} />
@@ -45,7 +45,7 @@ export function Bubble({ m, streaming, label }: { m: Msg; streaming?: boolean; l
             <Reasoning isStreaming={!!thinkingLive} defaultOpen={false}>
               <ReasoningTrigger
                 getThinkingMessage={(s) =>
-                  s ? <Shimmer duration={1.2}>Réfléchit…</Shimmer> : <span>Chaîne de pensée · {words(m.reasoning || "")} mots</span>
+                  s ? <Shimmer duration={1.2}>Thinking…</Shimmer> : <span>Chain of thought · {words(m.reasoning || "")} words</span>
                 }
               />
               <ReasoningContent>{m.reasoning || ""}</ReasoningContent>

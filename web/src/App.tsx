@@ -19,7 +19,7 @@ export default function App() {
     <TooltipProvider>
       <header className="sticky top-0 z-20 flex h-14 items-center gap-6 border-b bg-background/70 px-6 backdrop-blur-xl">
         <span className="text-sm font-semibold tracking-tight">
-          Salon<span className="text-muted-foreground"> · Ateliers</span>
+          Salon<span className="text-muted-foreground"> · Workshops</span>
         </span>
         <nav className="flex gap-1">
           {TABS.map((t) => (

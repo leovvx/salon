@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Lance le Salon / Ateliers.
+"""Starts Salon / Workshops.
 
     python run.py
 
-Options via variables d'environnement :
-    OLLAMA_HOST   adresse du serveur Ollama (def. http://localhost:11434)
-    OLLAMA_MODEL  modèle par défaut des agents (def. qwen3:4b)
-    PORT          port de l'interface web (def. 8765)
+Options via environment variables:
+    OLLAMA_HOST   Ollama server address (default http://localhost:11434)
+    OLLAMA_MODEL  default model for the agents (default qwen3:4b)
+    PORT          web UI port (default 8765)
 """
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ sys.path.insert(0, str(ROOT))
 
 
 def _load_env(path: Path) -> None:
-    """Charge un .env simple (KEY=VALUE) sans dépendance externe."""
+    """Loads a simple .env (KEY=VALUE) without external dependencies."""
     if not path.exists():
         return
     for line in path.read_text().splitlines():
@@ -42,7 +42,7 @@ if __name__ == "__main__":
     url = f"http://localhost:{PORT}"
     if (ROOT / "web" / "dist" / "index.html").exists():
         Timer(1.5, lambda: webbrowser.open(url)).start()
-        print(f"\n  Salon / Ateliers → {url}\n")
+        print(f"\n  Salon / Workshops → {url}\n")
     else:
-        print("\n  ⚠  Interface non buildée. Fais d'abord :  cd web && pnpm install && pnpm build\n")
+        print("\n  ⚠  UI not built. First run:  cd web && pnpm install && pnpm build\n")
     uvicorn.run("server.app:app", host="0.0.0.0", port=PORT, log_level="info")

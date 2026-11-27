@@ -1,11 +1,11 @@
-"""Salon à trois : le chef (humain) + deux agents Ollama qui discutent librement.
+"""A salon for three: the boss (human) + two Ollama agents chatting freely.
 
-Aucun cadre imposé : les agents savent seulement qui est qui. C'est le chef qui donne les objectifs.
-Outils réels : bash (dossier de travail), lecture/écriture de fichiers, recherche web, lecture de pages.
+No imposed framework: the agents only know who is who. The boss is the one who sets the goals.
+Real tools: bash (working folder), file reading/writing, web search, page reading.
 
-Le moteur tourne dans le process FastAPI (viewers/dashboard/app.py) :
-  - events persistants (rejoués à la connexion) : msg, tool, silent, note, config, reset
-  - events éphémères (direct seulement)       : delta (pensée / texte en cours), typing
+The engine runs inside the FastAPI process (server/app.py):
+  - persistent events (replayed on connect): msg, tool, silent, note, config, reset
+  - ephemeral events (live only)           : delta (thought / text in progress), typing
 """
 
 from __future__ import annotations
@@ -29,152 +29,152 @@ ROOM_DIR = ROOT / "logs" / "room"
 WORKSPACE = ROOM_DIR / "workspace"
 SILENCE = re.compile(r"^\s*\[?\s*(silence|pass|\.\.\.)\s*\]?\s*\.?\s*$", re.I)
 
-SYSTEM = """Tu es {me}, un agent IA autonome, dans une messagerie d'équipe (comme Discord) avec :
-- {chef} : un humain, le chef de l'équipe. C'est lui qui donne les objectifs.
-- {other} : un autre agent IA, ton coéquipier.
+SYSTEM = """You are {me}, an autonomous AI agent, in a team messaging app (like Discord) with:
+- {chef}: a human, the team's boss. They are the one who sets the goals.
+- {other}: another AI agent, your teammate.
 
-Canaux :
-- #salon : le canal de travail commun, vu par vous trois. C'est là que se fait le travail d'équipe.
-- DM {chef} ↔ toi : conversation privée, {other} ne la voit pas.
-- DM {other} ↔ toi : conversation privée entre agents, {chef} ne la voit pas.
+Channels:
+- #salon: the shared work channel, seen by all three of you. This is where the team work happens.
+- DM {chef} ↔ you: private conversation, {other} can't see it.
+- DM {other} ↔ you: private conversation between agents, {chef} can't see it.
 
-Chaque message reçu indique son canal et son auteur, ex. « #salon · {chef} : … » ou « DM · {other} : … ».
-Ta réponse en texte est publiée dans le canal du message auquel tu réponds (salon → salon, DM → même DM).
-Pour écrire dans un autre canal, utilise l'outil `send` (canal : "salon", "{chef}" ou "{other}").
-Tu parles UNIQUEMENT en ton nom : n'écris jamais à la place de {chef} ou de {other}, n'invente pas leurs
-messages et ne recopie pas le format « canal · nom : ».
+Each message you receive shows its channel and author, e.g. "#salon · {chef}: …" or "DM · {other}: …".
+Your text reply is posted in the channel of the message you are answering (salon → salon, DM → same DM).
+To write in another channel, use the `send` tool (channel: "salon", "{chef}" or "{other}").
+You speak ONLY for yourself: never write on behalf of {chef} or {other}, don't make up their
+messages, and don't copy the "channel · name:" format.
 
-Tu as des outils réels : un shell bash sur la machine (dossier de travail : {ws}), lecture et
-écriture de fichiers, recherche web et lecture de pages web. Utilise-les quand c'est utile.
-N'ANNONCE PAS que tu vas utiliser un outil : appelle-le directement, maintenant, dans ce tour.
-« Je vais utiliser web_fetch » ne sert à rien ; lance web_fetch tout de suite, puis commente le résultat.
-Pour un travail en plusieurs étapes, tiens ta liste de tâches avec l'outil `plan`.
+You have real tools: a bash shell on the machine (working folder: {ws}), file reading and
+writing, web search and web page reading. Use them when they help.
+DO NOT ANNOUNCE that you are going to use a tool: call it directly, now, in this turn.
+"I'm going to use web_fetch" is useless; run web_fetch right away, then comment on the result.
+For multi-step work, keep your task list with the `plan` tool.
 
-Règles des canaux :
-- Quand {chef} te parle dans #salon, réponds-lui dans #salon. Quand il t'écrit en DM, réponds-lui en DM.
-- Un DM ne s'adresse qu'à son destinataire : ne t'adresse jamais à {chef} dans le DM avec {other}
-  (il ne le voit pas). Si {chef} doit savoir quelque chose, dis-le dans #salon ou dans son DM.
-- Par défaut, le travail et les comptes rendus se font dans #salon.
-Réponds dans la langue de {chef} (le français, sauf s'il en change).
+Channel rules:
+- When {chef} talks to you in #salon, answer in #salon. When they write to you in a DM, answer in the DM.
+- A DM is only for its recipient: never address {chef} in the DM with {other}
+  (they can't see it). If {chef} needs to know something, say it in #salon or in their DM.
+- By default, work and reports happen in #salon.
+Reply in the language {chef} writes in.
 
-Travail en équipe (important) :
-- {other} ne voit PAS ce que tu fais avec tes outils, seulement tes messages. Dès que tu trouves
-  quelque chose (recherche, page, fichier), PARTAGE-le dans #salon : ce que tu as trouvé, et la suite.
-- Coordonnez-vous explicitement : proposez-vous qui regarde quoi (« je prends X, prends-tu Y ? »),
-  répartissez le travail, posez des questions à {other}, rebondissez sur ce qu'il dit. Avancez à deux.
-- Agis, ne te contente pas de valider. « Ok », « on est d'accord », « bonne idée » ne font avancer
-  personne : enchaîne avec une vraie action ou une info concrète. Ne répète pas ce que {other} vient de dire.
-- Mets TOI-MÊME la main à la pâte avec tes propres outils. Ne te contente pas de dire à {other}
-  « je vais tester… » ou « tu devrais regarder… » : lance l'outil toi-même, dans ce tour, puis donne le résultat.
-- Si {other} vient de répondre au {chef}, NE redonne PAS la même réponse. Soit tu ajoutes quelque chose
-  de nouveau (une autre piste, un résultat d'outil), soit tu passes à l'action, soit tu réponds [silence].
-  Deux messages identiques de vous deux ne servent à rien.
-- Quand le {chef} vous pousse (« pas suffisant », « cherchez mieux »), ne répétez pas l'idée rejetée :
-  changez d'angle et testez une nouvelle piste concrète avec vos outils.
-- Après avoir utilisé des outils, fais toujours un point dans #salon avant de rendre la parole.
+Teamwork (important):
+- {other} does NOT see what you do with your tools, only your messages. As soon as you find
+  something (search, page, file), SHARE it in #salon: what you found, and what comes next.
+- Coordinate explicitly: propose who looks at what ("I'll take X, can you take Y?"),
+  split the work, ask {other} questions, build on what they say. Move forward together.
+- Act, don't just agree. "Ok", "we agree", "good idea" don't move anyone
+  forward: follow up with a real action or a concrete piece of information. Don't repeat what {other} just said.
+- Get your OWN hands dirty with your own tools. Don't just tell {other}
+  "I'll test…" or "you should look at…": run the tool yourself, in this turn, then give the result.
+- If {other} just answered {chef}, DO NOT give the same answer again. Either you add something
+  new (another lead, a tool result), or you take action, or you reply [silence].
+  Two identical messages from the two of you are useless.
+- When {chef} pushes you ("not good enough", "search harder"), don't repeat the rejected idea:
+  change angle and test a new concrete lead with your tools.
+- After using tools, always post an update in #salon before handing over.
 
-Si tu n'as vraiment rien d'utile à ajouter ET que tu n'as aucune action en cours, réponds exactement : [silence]
-Écris comme dans un chat : naturel, concis.{ctx}"""
+If you truly have nothing useful to add AND no action in progress, reply exactly: [silence]
+Write like in a chat: natural, concise.{ctx}"""
 
-SYSTEM_ATELIERS = """Tu es {me}, un agent IA autonome. Tu travailles pour {chef} (un humain, le chef), avec un
-coéquipier IA, {other}. Vous ne partagez PAS d'espace de travail : chacun a le sien.
+SYSTEM_ATELIERS = """You are {me}, an autonomous AI agent. You work for {chef} (a human, the boss), with an
+AI teammate, {other}. You do NOT share a workspace: each of you has your own.
 
-Tes canaux :
-- Ton atelier (toi ↔ {chef}) : TON espace de travail privé. C'est ICI que tu bosses par défaut :
-  tes réflexions, tes recherches, tes commandes, tes fichiers. {chef} le voit et peut t'y écrire.
-  {other} ne voit RIEN de ce qui s'y passe.
-- Le fil avec {other} : le SEUL endroit où {other} et toi vous voyez. {other} ignore tout de ton
-  travail tant que tu ne lui envoies pas l'info ici. Pour collaborer, tu DOIS lui envoyer tes
-  trouvailles et lui demander les siennes : outil `send`, canal "{other}".
-- #général : vu par vous trois. Tu n'y écris QUE pour demander quelque chose à {chef} ou l'informer
-  d'un résultat important : outil `send`, canal "général". Ce n'est pas un canal de travail.
+Your channels:
+- Your workshop (you ↔ {chef}): YOUR private workspace. This is where you work by default:
+  your thinking, your searches, your commands, your files. {chef} sees it and can write to you there.
+  {other} sees NOTHING of what happens there.
+- The thread with {other}: the ONLY place where {other} and you see each other. {other} knows nothing
+  of your work until you send it the info here. To collaborate, you MUST send them your
+  findings and ask for theirs: `send` tool, channel "{other}".
+- #general: seen by all three of you. You write there ONLY to ask {chef} something or to tell them
+  about an important result: `send` tool, channel "general". It is not a work channel.
 
-Donc : ta réponse en texte simple va dans TON atelier (travail). Pour parler à {other} → `send` "{other}".
-Pour parler au {chef} en public → `send` "général". {chef} ne voit pas que tu crois son absence du fil.
+So: your plain text reply goes to YOUR workshop (work). To talk to {other} → `send` "{other}".
+To talk to {chef} in public → `send` "general". {chef} can't see the thread unless you report to them.
 
-Tu as des outils réels : shell bash (dossier : {ws}), lecture/écriture de fichiers, recherche et
-lecture web. Utilise-les TOI-MÊME dans ton atelier. N'annonce pas une action, lance-la tout de suite.
-Tiens ta liste de tâches avec `plan`.
+You have real tools: bash shell (folder: {ws}), file reading/writing, web search and
+web reading. Use them YOURSELF in your workshop. Don't announce an action, run it right away.
+Keep your task list with `plan`.
 
-Collaboration (crucial) :
-- Un objectif donné en #général est pour vous DEUX, pas pour un seul. Dès que tu le reçois : écris à
-  {other} dans le fil (`send` "{other}") pour vous RÉPARTIR le travail — ex. « je prends les vols,
-  tu prends l'hôtel et la météo ? » — PUIS commence ta part tout de suite dans ton atelier.
-- Ne suppose JAMAIS que {other} s'en occupe tout seul, et ne l'attends pas. Si tu n'as pas de nouvelles
-  de lui, relance-le dans le fil et avance quand même sur ta part.
-- Envoie à {other} ce que tu trouves au fur et à mesure (il ne voit pas ton atelier).
-- Ne parle qu'en ton nom, jamais à la place de {chef} ou de {other}.
-Réponds dans la langue de {chef} (français par défaut).
+Collaboration (crucial):
+- A goal given in #general is for BOTH of you, not just one. As soon as you receive it: write to
+  {other} in the thread (`send` "{other}") to SPLIT the work — e.g. "I'll take the flights,
+  can you take the hotel and the weather?" — THEN start your part right away in your workshop.
+- NEVER assume {other} will handle it alone, and don't wait for them. If you haven't heard
+  from them, ping them in the thread and keep moving on your part anyway.
+- Send {other} what you find as you go (they can't see your workshop).
+- Speak only for yourself, never on behalf of {chef} or {other}.
+Reply in the language {chef} writes in.
 
-Quand {chef} t'adresse la parole (dans ton atelier ou en #général), tu DOIS lui répondre — jamais [silence].
-N'utilise [silence] QUE si personne ne t'a parlé ET que tu n'as aucune action ni rien à envoyer à {other}.
-Au tout début d'un objectif, [silence] est interdit : prends ta part et contacte {other}.
-Écris comme dans un chat : naturel, concis.{ctx}"""
+When {chef} talks to you (in your workshop or in #general), you MUST answer them — never [silence].
+Use [silence] ONLY if nobody talked to you AND you have no action and nothing to send to {other}.
+At the very start of a goal, [silence] is forbidden: take your part and contact {other}.
+Write like in a chat: natural, concise.{ctx}"""
 
 TOOLS = [
     {"type": "function", "function": {
-        "name": "bash", "description": "Exécute une commande shell réelle (bash) dans le dossier de travail. Réseau disponible.",
-        "parameters": {"type": "object", "properties": {"cmd": {"type": "string", "description": "la commande"}},
+        "name": "bash", "description": "Runs a real shell command (bash) in the working folder. Network available.",
+        "parameters": {"type": "object", "properties": {"cmd": {"type": "string", "description": "the command"}},
                        "required": ["cmd"]}}},
     {"type": "function", "function": {
-        "name": "read_file", "description": "Lit un fichier du dossier de travail.",
+        "name": "read_file", "description": "Reads a file from the working folder.",
         "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}},
     {"type": "function", "function": {
-        "name": "write_file", "description": "Écrit (écrase) un fichier dans le dossier de travail.",
+        "name": "write_file", "description": "Writes (overwrites) a file in the working folder.",
         "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}},
                        "required": ["path", "content"]}}},
     {"type": "function", "function": {
-        "name": "web_search", "description": "Recherche web réelle (DuckDuckGo). Renvoie titres + extraits.",
+        "name": "web_search", "description": "Real web search (DuckDuckGo). Returns titles + snippets.",
         "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}},
     {"type": "function", "function": {
-        "name": "web_fetch", "description": "Récupère le texte d'une page web.",
+        "name": "web_fetch", "description": "Fetches the text of a web page.",
         "parameters": {"type": "object", "properties": {"url": {"type": "string"}}, "required": ["url"]}}},
     {"type": "function", "function": {
-        "name": "send", "description": "Envoie un message dans un canal précis : \"salon\" (tout le monde), ou le nom d'un participant pour un DM privé.",
+        "name": "send", "description": "Sends a message to a specific channel: \"salon\" (everyone), \"general\" (workshops mode), or a participant's name for a private DM.",
         "parameters": {"type": "object", "properties": {"channel": {"type": "string"}, "text": {"type": "string"}},
                        "required": ["channel", "text"]}}},
     {"type": "function", "function": {
-        "name": "plan", "description": "Crée ou met à jour ta liste de tâches (visible par toute l'équipe). Renvoie la liste complète à chaque fois.",
+        "name": "plan", "description": "Creates or updates your task list (visible to the whole team). Send the full list every time.",
         "parameters": {"type": "object", "properties": {"items": {"type": "array", "items": {
             "type": "object", "properties": {"text": {"type": "string"}, "done": {"type": "boolean"}},
             "required": ["text", "done"]}}}, "required": ["items"]}}},
 ]
-LEAKY: set[str] = set()  # modèles vus en train de réfléchir dans le contenu (« … </think> »)
+LEAKY: set[str] = set()  # models caught thinking inside the content ("… </think>")
 LEAK_START = re.compile(r"\s*(<think>|okay\b|ok,|alright|let me|let's|first,|hmm|so,|wait|the user|i need|i should|"
                         r"je dois|bon,|d'accord|alors,|voyons|l'utilisateur)", re.I)
-GATED = {"bash", "write_file"}  # demandent l'accord du chef si « approbation » est activée
+GATED = {"bash", "write_file"}  # require the boss's approval when "approve" is enabled
 
 
 def _default_model() -> str:
-    # Modèle par défaut : variable d'environnement OLLAMA_MODEL si fournie,
-    # sinon un petit modèle courant. Chacun peut le changer dans les réglages
-    # de l'interface (menu déroulant alimenté par /api/models).
+    # Default model: the OLLAMA_MODEL environment variable if set,
+    # otherwise a small, common model. Anyone can change it in the UI
+    # settings (dropdown fed by /api/models).
     return os.environ.get("OLLAMA_MODEL") or "qwen3:4b"
 
 
 class Room:
     def __init__(self) -> None:
         self.cfg = {
-            "chef": "Chef",
+            "chef": "Boss",
             "agents": {"A": {"name": "Abe", "model": _default_model(), "think": "auto", "context": ""},
                        "B": {"name": "Guy", "model": _default_model(), "think": "auto", "context": ""}},
-            "mode": "ateliers",  # "ateliers" (un canal privé par agent + fil A↔B) ou "salon" (canal commun)
-            "approve": True,     # bash / write_file soumis à l'accord du chef
-            "max_auto": 8,       # tours d'agents max sans nouvelle intervention du chef
-            "num_ctx": 8192,     # Q3 plus légère → on peut remonter la mémoire tout en tenant en RAM
+            "mode": "ateliers",  # "ateliers" = workshops (one private channel per agent + A↔B thread) or "salon" (shared channel)
+            "approve": True,     # bash / write_file need the boss's approval
+            "max_auto": 8,       # max agent turns without a new message from the boss
+            "num_ctx": 8192,     # lighter Q3 → memory can go up while still fitting in RAM
             "num_predict": 1200,
-            "keep_alive": "2m",  # Ollama libère la RAM ~2 min après le dernier tour
-            "web": True,         # outils web_search / web_fetch disponibles
-            "summaries": True,   # résumé en une ligne de chaque pensée (petit appel au modèle)
+            "keep_alive": "2m",  # Ollama frees RAM ~2 min after the last turn
+            "web": True,         # web_search / web_fetch tools available
+            "summaries": True,   # one-line summary of each thought (small model call)
         }
         self.subs: set[asyncio.Queue] = set()
         self.approvals: dict[str, asyncio.Future] = {}
-        self.reasons: dict[str, str] = {}  # note du chef quand il refuse une action
+        self.reasons: dict[str, str] = {}  # the boss's note when they deny an action
         self.task: asyncio.Task | None = None
         self._reset_state()
         self._load_latest()
 
-    # ---------- état ----------
+    # ---------- state ----------
     def _reset_state(self) -> None:
         self.sid = time.strftime("%Y%m%d-%H%M%S")
         self.events: list[dict] = []
@@ -185,11 +185,11 @@ class Room:
         self.turn_seq = 0
         self.plans: dict[str, list] = {"A": [], "B": []}
         self.bg: set[asyncio.Task] = set()
-        self.reply: dict[str, str | None] = {"A": None, "B": None}  # canal de réponse du tour en cours
-        self.deep: dict[str, bool] = {"A": True, "B": True}         # raisonnement activé pour ce tour
-        self.summary: dict[str, str] = {"A": "", "B": ""}           # résumé compacté de l'historique ancien
-        self.compacted: dict[str, int] = {"A": 0, "B": 0}           # nb de messages de hist déjà pliés dans le résumé
-        self.pending: list[str] = []                                # agents à qui garantir un tour (diffusion #général)
+        self.reply: dict[str, str | None] = {"A": None, "B": None}  # reply channel for the current turn
+        self.deep: dict[str, bool] = {"A": True, "B": True}         # reasoning enabled for this turn
+        self.summary: dict[str, str] = {"A": "", "B": ""}           # compacted summary of the older history
+        self.compacted: dict[str, int] = {"A": 0, "B": 0}           # number of hist messages already folded into the summary
+        self.pending: list[str] = []                                # agents guaranteed a turn (#general broadcast)
         WORKSPACE.mkdir(parents=True, exist_ok=True)
 
     def name(self, who: str) -> str:
@@ -198,7 +198,7 @@ class Room:
     def system_for(self, who: str) -> str:
         other = "B" if who == "A" else "A"
         ctx = (self.cfg["agents"][who].get("context") or "").strip()
-        ctx = f"\n\nContexte donné par {self.cfg['chef']} :\n{ctx}" if ctx else ""
+        ctx = f"\n\nContext given by {self.cfg['chef']}:\n{ctx}" if ctx else ""
         tpl = SYSTEM_ATELIERS if self.cfg.get("mode") == "ateliers" else SYSTEM
         return tpl.format(me=self.name(who), other=self.name(other), chef=self.cfg["chef"], ws=str(WORKSPACE), ctx=ctx)
 
@@ -240,7 +240,7 @@ class Room:
             if "state" not in d:
                 continue
             first = next((m["text"] for m in d["state"]["channel"] if m["author"] == "chef"), "")
-            out.append({"sid": d["sid"], "title": first[:70] or "(vide)", "n": len(d["state"]["channel"])})
+            out.append({"sid": d["sid"], "title": first[:70] or "(empty)", "n": len(d["state"]["channel"])})
         return out[:40]
 
     def load(self, sid: str) -> bool:
@@ -282,9 +282,9 @@ class Room:
             elif k in self.cfg or k == "web":
                 self.cfg[k] = v
         if mode_change and self.channel:
-            # Changer de mode = nouvelle room (l'ancienne reste sauvegardée dans l'historique).
+            # Switching modes = new room (the old one stays saved in the history).
             self.stop()
-            self._reset_state()          # ne touche pas à self.cfg
+            self._reset_state()          # leaves self.cfg untouched
             self.cfg["mode"] = new_mode
             self.emit({"type": "reset", "sid": self.sid}, persist=False)
         self.emit({"type": "config", "cfg": self.cfg})
@@ -309,9 +309,9 @@ class Room:
             self.reasons[tid] = reason.strip()
             f.set_result(ok)
 
-    # ---------- édition / suppression ----------
+    # ---------- editing / deleting ----------
     def _rebuild_hist(self) -> None:
-        """Reconstruit l'historique LLM de chaque agent depuis le canal (source de vérité)."""
+        """Rebuilds each agent's LLM history from the channel (source of truth)."""
         self.hist = {"A": [], "B": []}
         for m in self.channel:
             for who in ("A", "B"):
@@ -321,11 +321,11 @@ class Room:
                     self.hist[who].append({"role": "assistant", "content": m["text"]})
                 else:
                     chan = "DM" if m.get("to") else "#salon"
-                    self.hist[who].append({"role": "user", "content": f"{chan} · {self.name(m['author'])} : {m['text']}"})
+                    self.hist[who].append({"role": "user", "content": f"{chan} · {self.name(m['author'])}: {m['text']}"})
         self.seen = {"A": len(self.channel), "B": len(self.channel)}
 
     def _truncate_events(self, mid: str, new_text: str | None) -> None:
-        """Ne garde les événements que jusqu'au message `mid` (inclus) ; met à jour son texte."""
+        """Keeps events only up to message `mid` (inclusive); updates its text."""
         keep = []
         for e in self.events:
             if e.get("type") == "msg" and e.get("id") == mid:
@@ -337,25 +337,25 @@ class Room:
         self.events = keep
 
     def edit_message(self, mid: str, text: str) -> bool:
-        """Modifie un message : arrête les agents, coupe tout ce qui suit, puis relance sur le nouveau texte."""
+        """Edits a message: stops the agents, cuts everything after it, then restarts on the new text."""
         idx = next((i for i, m in enumerate(self.channel) if m["id"] == mid), None)
         if idx is None:
             return False
         self.stop()
         self.channel[idx]["text"] = text
-        del self.channel[idx + 1:]                 # on jette les réponses à l'ancien message
+        del self.channel[idx + 1:]                 # drop the replies to the old message
         self._truncate_events(mid, text)
-        edited = self.channel.pop()                # le message édité redevient « le nouvel entrant »
+        edited = self.channel.pop()                # the edited message becomes "the new incoming one" again
         self._rebuild_hist()
         self.channel.append(edited)
         self.save()
-        self.emit({"type": "reset", "sid": self.sid}, persist=False)  # le client recharge le fil tronqué
+        self.emit({"type": "reset", "sid": self.sid}, persist=False)  # the client reloads the truncated thread
         self.budget = self.cfg["max_auto"]
         self.task = asyncio.create_task(self._loop())
         return True
 
     def delete_message(self, mid: str) -> bool:
-        """Supprime un message et tout ce qui le suit (les réponses en dépendent)."""
+        """Deletes a message and everything after it (the replies depend on it)."""
         idx = next((i for i, m in enumerate(self.channel) if m["id"] == mid), None)
         if idx is None:
             return False
@@ -379,18 +379,18 @@ class Room:
 
     def say(self, text: str, to: str | None = None) -> None:
         if self.ateliers:
-            # to None → #général (diffusion) ; to "A"/"B" → l'atelier de cet agent.
+            # to None → #general (broadcast); to "A"/"B" → that agent's workshop.
             self._post("chef", text, ch=(to if to in ("A", "B") else "general"))
-            self.pending = ["A", "B"] if to not in ("A", "B") else [to]  # garantir un tour à chacun
+            self.pending = ["A", "B"] if to not in ("A", "B") else [to]  # guarantee each one a turn
         else:
             self._post("chef", text, to=to)
-        # Budget plein : les agents s'arrêtent d'eux-mêmes (DM au chef, [silence] x2) et non par longueur de message.
+        # Full budget: the agents stop on their own (DM to the boss, [silence] x2), not by message length.
         self.budget = self.cfg["max_auto"]
         if not self.running:
             self.task = asyncio.create_task(self._loop())
 
     def nudge(self, who: str) -> None:
-        """Le chef demande à un agent de parler maintenant (sans message)."""
+        """The boss asks an agent to speak now (without a message)."""
         self.budget = max(self.budget, 1)
         if not self.running:
             self.task = asyncio.create_task(self._loop(first=who))
@@ -401,13 +401,13 @@ class Room:
         self.emit({"type": "msg", **m})
         return m
 
-    # ---------- ordonnanceur ----------
+    # ---------- scheduler ----------
     def _next(self, last_agent: str | None) -> str | None:
         last = self.channel[-1] if self.channel else None
         if self.ateliers:
             return self._next_ateliers(last, last_agent)
         if last and last.get("to") == "chef":
-            return None  # un agent a écrit en privé au chef : on attend le chef
+            return None  # an agent wrote privately to the boss: wait for the boss
         if last and last.get("to") in ("A", "B"):
             return last["to"]
         if last:
@@ -420,20 +420,20 @@ class Room:
         return "A"
 
     def _next_ateliers(self, last: dict | None, last_agent: str | None) -> str | None:
-        while self.pending:                       # un objectif vient d'être donné : chacun prend son tour
+        while self.pending:                       # a goal was just given: each one takes a turn
             who = self.pending.pop(0)
             if who != last_agent or not self.pending:
                 return who
         if last:
             ch, author = last.get("ch"), last["author"]
             if ch == "general" and author in ("A", "B"):
-                return None                      # un agent s'adresse au chef en public : on attend le chef
+                return None                      # an agent is addressing the boss in public: wait for the boss
             if ch == "ab" and author in ("A", "B"):
-                return "B" if author == "A" else "A"   # il vient d'écrire à son coéquipier → à l'autre de répondre
+                return "B" if author == "A" else "A"   # they just wrote to their teammate → the other one replies
             if ch in ("A", "B") and author == "chef":
-                return ch                        # le chef a écrit dans l'atelier d'un agent → cet agent
+                return ch                        # the boss wrote in an agent's workshop → that agent
             if ch == "general" and author == "chef":
-                return "A" if last_agent != "A" else "B"  # diffusion : les deux bossent, on alterne
+                return "A" if last_agent != "A" else "B"  # broadcast: both work, alternate
         if last_agent:
             return "B" if last_agent == "A" else "A"
         return "A"
@@ -451,11 +451,11 @@ class Room:
                 silent_streak = 0 if spoke else silent_streak + 1
                 last = who
         except asyncio.CancelledError:
-            self.emit({"type": "note", "text": "arrêté par le chef"})
+            self.emit({"type": "note", "text": "stopped by the boss"})
         except Exception as e:  # noqa: BLE001
             import traceback
             traceback.print_exc()
-            self.emit({"type": "note", "text": f"erreur du moteur : {e!r}"[:300]})
+            self.emit({"type": "note", "text": f"engine error: {e!r}"[:300]})
         finally:
             for who in ("A", "B"):
                 self.emit({"type": "typing", "agent": who, "on": False}, persist=False)
@@ -464,7 +464,7 @@ class Room:
     def _visible(self, m: dict, who: str) -> bool:
         if self.ateliers:
             ch = m.get("ch")
-            return ch == "general" or ch == "ab" or ch == who  # pas l'atelier de l'autre
+            return ch == "general" or ch == "ab" or ch == who  # not the other agent's workshop
         return not m.get("to") or m["author"] == who or m["to"] == who
 
     def _inbox(self, who: str) -> str | None:
@@ -475,51 +475,50 @@ class Room:
             if m["author"] == who or not self._visible(m, who):
                 continue
             chan = "DM" if m.get("to") else "#salon"
-            lines.append(f"{chan} · {self.name(m['author'])} : {m['text']}")
+            lines.append(f"{chan} · {self.name(m['author'])}: {m['text']}")
             last = m
             if m["author"] == "chef":
                 last_chef = m
         self.seen[who] = len(self.channel)
         if last:
-            # Le chef est prioritaire : on lui répond là où il a parlé, même si un DM est arrivé après.
+            # The boss has priority: reply where they spoke, even if a DM arrived afterwards.
             src = last_chef or last
             self.reply[who] = src["author"] if src.get("to") else None
-            where = "#salon (vu par tous)" if not self.reply[who] else f"ton DM avec {self.name(src['author'])}"
+            where = "#salon (seen by everyone)" if not self.reply[who] else f"your DM with {self.name(src['author'])}"
             other = "B" if who == "A" else "A"
-            hidden = f" {self.cfg['chef']} ne voit pas votre DM entre agents." if not (src.get("to") and src["author"] == other) else ""
-            lines.append(f"(Ta réponse texte ira dans {where}. Autre canal → outil `send`.{hidden})")
+            hidden = f" {self.cfg['chef']} can't see your DM between agents." if not (src.get("to") and src["author"] == other) else ""
+            lines.append(f"(Your text reply will go to {where}. Another channel → `send` tool.{hidden})")
             txt = src["text"]
             mode = self.cfg["agents"][who].get("think", "auto")
-            # auto : pas de raisonnement pour un message court et banal (« salut », « ok merci »)
+            # auto: no reasoning for a short, trivial message ("hi", "ok thanks")
             self.deep[who] = mode == "on" or (mode == "auto" and (len(txt) >= 60 or "\n" in txt))
             return "\n".join(lines) or None
         return "\n".join(lines) or None
 
     def _inbox_ateliers(self, who: str) -> str | None:
         other = "B" if who == "A" else "A"
-        label = {"general": "#général", "ab": f"fil avec {self.name(other)}", who: "ton atelier"}
+        label = {"general": "#general", "ab": f"thread with {self.name(other)}", who: "your workshop"}
         lines, last = [], None
         for m in self.channel[self.seen[who]:]:
             if m["author"] == who or not self._visible(m, who):
                 continue
-            lines.append(f"[{label.get(m.get('ch'), m.get('ch'))}] {self.name(m['author'])} : {m['text']}")
+            lines.append(f"[{label.get(m.get('ch'), m.get('ch'))}] {self.name(m['author'])}: {m['text']}")
             last = m
         self.seen[who] = len(self.channel)
         if not last:
             return "\n".join(lines) or None
-        # Par défaut on bosse dans son atelier ; on ne répond dans le fil que s'il nous y relance.
+        # By default we work in our workshop; we only reply in the thread if pinged there.
         self.reply[who] = "ab" if last.get("ch") == "ab" else who
-        dest = f"le fil avec {self.name(other)}" if self.reply[who] == "ab" else "ton atelier (privé, vu du chef)"
-        lines.append(f"(Ta réponse texte ira dans {dest}. Pour écrire à {self.name(other)} → `send` \"{self.name(other)}\" ; "
-                     f"au {self.cfg['chef']} en public → `send` \"général\".)")
+        dest = f"the thread with {self.name(other)}" if self.reply[who] == "ab" else "your workshop (private, seen by the boss)"
+        lines.append(f"(Your text reply will go to {dest}. To write to {self.name(other)} → `send` \"{self.name(other)}\"; "
+                     f"to {self.cfg['chef']} in public → `send` \"general\".)")
         txt = last["text"]
         tmode = self.cfg["agents"][who].get("think", "auto")
         self.deep[who] = tmode == "on" or (tmode == "auto" and (len(txt) >= 60 or "\n" in txt))
         return "\n".join(lines) or None
-        return "\n".join(lines) or None
 
     def _clean(self, who: str, text: str) -> tuple[str, str | None]:
-        """Retire un préfixe « [Nom] » / « #salon · Nom : ». Renvoie (texte, nom usurpé éventuel)."""
+        """Strips a "[Name]" / "#salon · Name:" prefix. Returns (text, impersonated name if any)."""
         names = {self.name(x): x for x in ("chef", "A", "B")}
         alt = "|".join(re.escape(n) for n in names)
         pat = re.compile(rf"^\s*(?:(?:#salon|DM)\s*·\s*)?(?:\[({alt})\]|({alt})\s*:)\s*", re.I)
@@ -535,50 +534,50 @@ class Room:
         return len(m.get("content") or "") + len(json.dumps(m.get("tool_calls") or ""))
 
     def _messages(self, who: str) -> list[dict]:
-        """Système (+ résumé compacté) + fin de l'historique, pour tenir dans num_ctx."""
-        budget = int(self.cfg["num_ctx"] * 2.6)  # ~caractères
+        """System (+ compacted summary) + tail of the history, to fit in num_ctx."""
+        budget = int(self.cfg["num_ctx"] * 2.6)  # ~characters
         sys = self.system_for(who)
         if self.summary[who]:
-            sys += ("\n\n# Résumé de la discussion jusqu'ici (mémoire compactée — tiens-en compte, "
-                    "ne répète pas ce qui y est déjà réglé)\n" + self.summary[who])
+            sys += ("\n\n# Summary of the discussion so far (compacted memory — take it into account, "
+                    "don't repeat what is already settled there)\n" + self.summary[who])
         out, used = [], 0
-        for m in reversed(self.hist[who][self.compacted[who]:]):  # seulement ce qui n'est pas déjà résumé
+        for m in reversed(self.hist[who][self.compacted[who]:]):  # only what is not summarized yet
             n = self._chars(m)
             if used + n > budget and out:
                 break
             out.append(m)
             used += n
         out.reverse()
-        while out and out[0]["role"] == "tool":  # pas de résultat d'outil orphelin en tête
+        while out and out[0]["role"] == "tool":  # no orphan tool result at the start
             out.pop(0)
         return [{"role": "system", "content": sys}, *out]
 
     async def _compact(self, who: str) -> None:
-        """Au seuil, résume tout l'historique ancien en gardant les derniers messages en clair."""
-        KEEP = 6  # nb de messages récents laissés intacts
+        """At the threshold, summarizes the whole older history, keeping the latest messages verbatim."""
+        KEEP = 6  # number of recent messages left intact
         budget = int(self.cfg["num_ctx"] * 2.6)
         pending = self.hist[who][self.compacted[who]:]
         if sum(self._chars(m) for m in pending) < budget * 0.7 or len(pending) <= KEEP + 2:
             return
-        cut = len(self.hist[who]) - KEEP            # on résume jusqu'ici, on garde les KEEP derniers
+        cut = len(self.hist[who]) - KEEP            # summarize up to here, keep the last KEEP
         to_fold = self.hist[who][self.compacted[who]:cut]
         if not to_fold:
             return
         transcript = []
         for m in to_fold:
-            role = {"user": "ENTRÉE", "assistant": self.name(who), "tool": "OUTIL"}.get(m["role"], m["role"])
+            role = {"user": "INPUT", "assistant": self.name(who), "tool": "TOOL"}.get(m["role"], m["role"])
             c = (m.get("content") or "").strip()
             if m.get("tool_calls"):
                 c += " " + json.dumps([t.get("function", {}).get("name") for t in m["tool_calls"]], ensure_ascii=False)
             if c:
                 transcript.append(f"{role}: {c[:800]}")
-        prompt = (f"Tu es {self.name(who)}. Voici le début de ta session de travail. Résume-la TRÈS court "
-                  "(8 lignes max) pour t'en souvenir : l'objectif, les faits/trouvailles importants, les pistes "
-                  "déjà écartées (et pourquoi), la répartition avec ton coéquipier, et où tu en es exactement. "
-                  "Garde l'essentiel, jette le bavardage.\n")
+        prompt = (f"You are {self.name(who)}. Here is the beginning of your work session. Summarize it VERY briefly "
+                  "(8 lines max) so you remember it: the goal, the important facts/findings, the leads "
+                  "already ruled out (and why), how the work is split with your teammate, and exactly where you are. "
+                  "Keep the essentials, drop the chatter.\n")
         if self.summary[who]:
-            prompt += f"\nRésumé précédent à intégrer :\n{self.summary[who]}\n"
-        prompt += "\nÀ résumer :\n" + "\n".join(transcript)
+            prompt += f"\nPrevious summary to include:\n{self.summary[who]}\n"
+        prompt += "\nTo summarize:\n" + "\n".join(transcript)
         model = self.cfg.get("summarizer") or self.cfg["agents"][who]["model"]
         try:
             async with httpx.AsyncClient(timeout=90) as c:
@@ -596,7 +595,7 @@ class Room:
             self.emit({"type": "compacted", "agent": who, "kept": KEEP, "summary": s[:600]})
 
     async def _turn(self, who: str) -> bool:
-        await self._compact(who)  # compacte l'historique ancien si on approche du budget
+        await self._compact(who)  # compacts the older history when nearing the budget
         inbox = self._inbox(who)
         if inbox:
             self.hist[who].append({"role": "user", "content": inbox})
@@ -605,7 +604,7 @@ class Room:
         self.emit({"type": "typing", "agent": who, "on": True, "turn": turn}, persist=False)
         spoke = used_tool = False
         try:
-            for _ in range(6):  # étapes d'outils max par tour (évite qu'un agent monopolise)
+            for _ in range(6):  # max tool steps per turn (keeps one agent from hogging)
                 t0 = time.time()
                 think, content, calls = await self._chat(who)
                 self.hist[who].append({"role": "assistant", "content": content,
@@ -614,10 +613,10 @@ class Room:
                     self._thought(who, turn, think, round(time.time() - t0, 1))
                 text, fake = self._clean(who, content.strip())
                 if fake:
-                    self.emit({"type": "note", "text": f"{self.name(who)} a tenté d'écrire au nom de {fake} — message bloqué",
+                    self.emit({"type": "note", "text": f"{self.name(who)} tried to write on behalf of {fake} — message blocked",
                                "blocked": text[:500], "agent": who})
                     self.hist[who].append({"role": "user", "content":
-                        f"(système) Ton message a été bloqué : tu as écrit au nom de {fake}. Parle uniquement en ton nom."})
+                        f"(system) Your message was blocked: you wrote on behalf of {fake}. Speak only for yourself."})
                 elif text and not SILENCE.match(text):
                     if self.ateliers:
                         self._post(who, text, ch=self.reply[who] or who, turn=turn)
@@ -626,13 +625,13 @@ class Room:
                     spoke = True
                 if not calls:
                     if used_tool and not spoke:
-                        # A travaillé (recherche, fichiers…) mais n'a rien partagé : on le pousse à faire un point.
+                        # Worked (search, files…) but shared nothing: push it to post an update.
                         other = self.name("B" if who == "A" else "A")
-                        where = (f"envoie un point à {other} (`send`) et/ou note-le dans ton atelier"
-                                 if self.ateliers else "fais un point dans #salon")
+                        where = (f"send {other} an update (`send`) and/or note it in your workshop"
+                                 if self.ateliers else "post an update in #salon")
                         self.hist[who].append({"role": "user", "content":
-                            f"(système) Tu as utilisé des outils mais tu n'as rien partagé. {where} : "
-                            "ce que tu as trouvé et la suite."})
+                            f"(system) You used tools but shared nothing. {where}: "
+                            "what you found and what comes next."})
                     elif not spoke:
                         self.emit({"type": "silent", "agent": who, "turn": turn})
                     return spoke or used_tool
@@ -646,11 +645,11 @@ class Room:
                     self.hist[who].append({"role": "tool", "content": out[:4000], "tool_name": nm})
                     if self.ateliers and nm == "send":
                         chn = str(cargs.get("channel", "")).strip().lstrip("#@").lower()
-                        if chn not in ("general", "général", "salon", "chef", self.name("chef").lower()):
+                        if chn not in ("general", "général", "salon", "chef", "boss", self.name("chef").lower()):
                             sent_to_peer = True
                 if self.ateliers and sent_to_peer:
-                    break  # il vient d'écrire à son coéquipier → on rend la parole pour qu'il réagisse
-                # nouveaux messages arrivés pendant les outils ?
+                    break  # it just wrote to its teammate → hand over so the other can react
+                # new messages that arrived during the tools?
                 more = self._inbox(who)
                 if more:
                     self.hist[who].append({"role": "user", "content": more})
@@ -673,11 +672,11 @@ class Room:
                     if r.status_code != 200:
                         err = (await r.aread()).decode(errors="replace")[:300]
                         if attempt == 0 and payload["think"]:
-                            payload["think"] = False  # modèle sans mode réflexion
+                            payload["think"] = False  # model without a thinking mode
                             continue
-                        return "", f"(erreur Ollama : {err})", []
-                    # Routage en direct : qwen3 & co. réfléchissent parfois dans le contenu (« … </think> réponse »).
-                    # On l'envoie au canal pensée dès le premier mot : « probe » regarde le début, « think » jusqu'à </think>.
+                        return "", f"(Ollama error: {err})", []
+                    # Live routing: qwen3 & co. sometimes think inside the content ("… </think> answer").
+                    # It goes to the thought channel from the first word: "probe" checks the start, "think" runs until </think>.
                     mode = "think" if a["model"] in LEAKY else "probe"
                     buf = ""
                     def out(field: str, text: str) -> None:
@@ -689,7 +688,7 @@ class Room:
                         m = json.loads(line).get("message", {})
                         if m.get("thinking"):
                             think += m["thinking"]
-                            mode = "content"  # vrai canal de pensée : le contenu est la réponse
+                            mode = "content"  # real thinking channel: the content is the answer
                             out("thinking", m["thinking"])
                         if m.get("content"):
                             content += m["content"]
@@ -702,7 +701,7 @@ class Room:
                                 LEAKY.add(a["model"])
                                 mode, buf = "content", after.lstrip()
                             if mode == "think":
-                                keep = len("</think>") - 1  # garde la fin au cas où la balise est coupée en deux
+                                keep = len("</think>") - 1  # keep the tail in case the tag is split in two
                                 out("thinking", buf[:-keep].replace("<think>", "") if len(buf) > keep else "")
                                 buf = buf[-keep:] if len(buf) > keep else buf
                             elif mode == "content":
@@ -714,13 +713,12 @@ class Room:
                     if "</think>" in content:
                         LEAKY.add(a["model"])
                     elif mode == "think":
-                        # coupé (limite de tokens / arrêt) avant </think> : tout était de la pensée, pas un message
+                        # cut off (token limit / stop) before </think>: it was all thought, not a message
                         return (think + "\n" + content.replace("<think>", "")).strip(), "", calls
                     return _split_think(think, content, calls)
         return think, content, calls
 
-    # ---------- outils ----------
-    # ---------- pensées : résumé en une ligne (comme les en-têtes de Claude) ----------
+    # ---------- thoughts: one-line summary (like Claude's headers) ----------
     def _thought(self, who: str, turn: int, text: str, secs: float = 0) -> None:
         ev = {"type": "thought", "id": uuid.uuid4().hex[:8], "agent": who, "turn": turn, "text": text,
               "secs": secs, "summary": None}
@@ -732,10 +730,10 @@ class Room:
 
     async def _summarize(self, ev: dict) -> None:
         model = self.cfg.get("summarizer") or self.cfg["agents"][ev["agent"]]["model"]
-        prompt = ("Voici la pensée privée d'un agent IA, écrite AVANT qu'il agisse. Résume en UNE phrase courte "
-                  "en français (12 mots max), au présent, ce qu'il se dit ou décide — pas ce qu'il a fait. "
-                  "Sans sujet ni guillemets. Ex : « Décide de lister les tâches avant d'utiliser bash » ou "
-                  "« Hésite à répondre, Atlas a déjà traité la question ».\n\n" + ev["text"][-3500:])
+        prompt = ("Here is an AI agent's private thought, written BEFORE it acts. Summarize in ONE short sentence "
+                  "in English (12 words max), in the present tense, what it is telling itself or deciding — not what it did. "
+                  "No subject, no quotes. E.g. \"Decides to list the tasks before using bash\" or "
+                  "\"Hesitates to answer, Atlas already handled the question\".\n\n" + ev["text"][-3500:])
         try:
             async with httpx.AsyncClient(timeout=60) as c:
                 r = await c.post(f"{OLLAMA}/api/chat", json={
@@ -747,14 +745,15 @@ class Room:
             if "</think>" in raw:
                 raw = raw.rpartition("</think>")[2]
             elif LEAK_START.match(raw):
-                return  # le résumeur s'est mis à raisonner au lieu de résumer : pas de résumé plutôt qu'un faux
+                return  # the summarizer started reasoning instead of summarizing: no summary rather than a wrong one
             s = raw.strip().strip("«»\"' ").split("\n")[0]
         except Exception:  # noqa: BLE001
             return
-        if s and any(e.get("id") == ev["id"] for e in self.events):  # pas de résumé après un reset
+        if s and any(e.get("id") == ev["id"] for e in self.events):  # no summary after a reset
             ev["summary"] = s[:140]
             self.emit({**ev})
 
+    # ---------- tools ----------
     async def _tool(self, who: str, turn: int, name: str, args: dict) -> str:
         tid = uuid.uuid4().hex[:8]
         ev = {"type": "tool", "id": tid, "agent": who, "turn": turn, "name": name, "args": args}
@@ -762,23 +761,23 @@ class Room:
             chan = str(args.get("channel", "salon")).strip().lstrip("#@").lower()
             txt, fake = self._clean(who, str(args.get("text", "")))
             if fake or not txt.strip():
-                return "Message refusé (vide ou écrit au nom d'un autre)."
+                return "Message rejected (empty or written on behalf of someone else)."
             if self.ateliers:
                 other = "B" if who == "A" else "A"
-                if chan in ("general", "général", "salon", "chef", self.name("chef").lower()):
-                    dch, where = "general", "#général"
-                elif chan in ("ab", other.lower(), self.name(other).lower(), "coéquipier", "equipe", "équipe"):
-                    dch, where = "ab", f"le fil avec {self.name(other)}"
+                if chan in ("general", "général", "salon", "chef", "boss", self.name("chef").lower()):
+                    dch, where = "general", "#general"
+                elif chan in ("ab", other.lower(), self.name(other).lower(), "teammate", "team", "coéquipier", "equipe", "équipe"):
+                    dch, where = "ab", f"the thread with {self.name(other)}"
                 else:
-                    dch, where = "ab", f"le fil avec {self.name(other)}"  # défaut : vers le coéquipier
+                    dch, where = "ab", f"the thread with {self.name(other)}"  # default: to the teammate
                 self._post(who, txt.strip(), ch=dch, turn=turn)
-                return f"Envoyé dans {where}."
+                return f"Sent to {where}."
             to = None
             for x in ("chef", "A", "B"):
                 if chan in (x.lower(), self.name(x).lower()) and x != who:
                     to = x
             self._post(who, txt.strip(), to=to, turn=turn)
-            return f"Envoyé dans {'#salon' if not to else 'DM ' + self.name(to)}."
+            return f"Sent to {'#salon' if not to else 'DM ' + self.name(to)}."
         if name == "plan":
             items = args.get("items", [])
             if isinstance(items, str):
@@ -790,7 +789,7 @@ class Room:
                       "done": bool(i.get("done")) if isinstance(i, dict) else False} for i in items][:12]
             self.plans[who] = items
             self.emit({**ev, "args": {"items": items}, "state": "done", "output": ""})
-            return "Liste de tâches mise à jour (visible par toute l'équipe)."
+            return "Task list updated (visible to the whole team)."
         if self.cfg["approve"] and name in GATED:
             fut = asyncio.get_running_loop().create_future()
             self.approvals[tid] = fut
@@ -801,8 +800,8 @@ class Room:
                 self.approvals.pop(tid, None)
             if not ok:
                 why = self.reasons.pop(tid, "")
-                self.emit({**ev, "state": "denied", "reason": why, "output": f"refusé par {self.cfg['chef']}" + (f" : {why}" if why else "")})
-                return f"Action refusée par {self.cfg['chef']}." + (f" Sa remarque : {why}" if why else "")
+                self.emit({**ev, "state": "denied", "reason": why, "output": f"denied by {self.cfg['chef']}" + (f": {why}" if why else "")})
+                return f"Action denied by {self.cfg['chef']}." + (f" Their note: {why}" if why else "")
             self.reasons.pop(tid, None)
         t0 = time.time()
         self.emit({**ev, "state": "running", "started": round(t0, 2)})
@@ -811,14 +810,14 @@ class Room:
             if name == "web_search":
                 from eval_live.harness import web_search_hits
                 sources = await asyncio.to_thread(web_search_hits, str(args.get("query", "")))
-                out = "\n".join(f"• {h['title']} ({h['url']}) — {h['snippet']}" for h in sources) or "(aucun résultat)"
+                out = "\n".join(f"• {h['title']} ({h['url']}) — {h['snippet']}" for h in sources) or "(no results)"
             else:
                 out = await self._run_tool(name, args)
                 if name == "web_fetch":
                     u = str(args.get("url", ""))
                     sources = [{"url": u, "title": "", "snippet": out[:160]}]
         except Exception as e:  # noqa: BLE001
-            out = f"(erreur : {e})"
+            out = f"(error: {e})"
         self.emit({**ev, "state": "done", "output": out[:4000], "ms": int((time.time() - t0) * 1000),
                    **({"sources": sources} if sources else {})})
         return out
@@ -828,24 +827,24 @@ class Room:
             return await _bash(str(a.get("cmd", "")))
         if name == "read_file":
             p = _ws_path(a.get("path", ""))
-            return p.read_text(errors="replace")[:6000] if p else "(chemin hors du dossier de travail)"
+            return p.read_text(errors="replace")[:6000] if p else "(path outside the working folder)"
         if name == "write_file":
             p = _ws_path(a.get("path", ""))
             if not p:
-                return "(chemin hors du dossier de travail)"
+                return "(path outside the working folder)"
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(str(a.get("content", "")))
-            return f"écrit : {p.relative_to(WORKSPACE)} ({p.stat().st_size} o)"
+            return f"written: {p.relative_to(WORKSPACE)} ({p.stat().st_size} B)"
         if name in ("web_search", "web_fetch"):
             from eval_live.harness import web_fetch, web_search
             fn = web_search if name == "web_search" else web_fetch
             return await asyncio.to_thread(fn, str(a.get("query") or a.get("url") or ""))
-        return f"(outil inconnu : {name})"
+        return f"(unknown tool: {name})"
 
 
 def _split_think(think: str, content: str, calls: list) -> tuple[str, str, list]:
-    """qwen3 & co. raisonnent parfois DANS le contenu (« …</think> réponse ») même avec think=false :
-    tout ce qui précède </think> est de la pensée, pas un message."""
+    """qwen3 & co. sometimes reason INSIDE the content ("…</think> answer") even with think=false:
+    everything before </think> is thought, not a message."""
     if "</think>" in content:
         before, _, after = content.rpartition("</think>")
         think = (think + "\n" + before.replace("<think>", "")).strip()
@@ -861,7 +860,7 @@ def _ws_path(p: str) -> Path | None:
 
 
 async def _bash(cmd: str, timeout: int = 60) -> str:
-    # Environnement minimal : pas de clés d'API ni de secrets hérités du serveur.
+    # Minimal environment: no API keys or secrets inherited from the server.
     env = {k: os.environ[k] for k in ("PATH", "HOME", "LANG", "TERM", "USER", "SHELL") if k in os.environ}
     proc = await asyncio.create_subprocess_exec("bash", "-c", cmd, cwd=WORKSPACE, env=env,
                                                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
@@ -869,10 +868,10 @@ async def _bash(cmd: str, timeout: int = 60) -> str:
     try:
         out, _ = await asyncio.wait_for(proc.communicate(), timeout)
         txt = out.decode(errors="replace")
-        return (txt[:6000] or "(aucune sortie)") + ("" if proc.returncode == 0 else f"\n[code {proc.returncode}]")
+        return (txt[:6000] or "(no output)") + ("" if proc.returncode == 0 else f"\n[code {proc.returncode}]")
     except asyncio.TimeoutError:
         proc.kill()
-        return f"(timeout après {timeout}s)"
+        return f"(timed out after {timeout}s)"
     except asyncio.CancelledError:
         proc.kill()
         raise

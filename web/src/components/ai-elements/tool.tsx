@@ -45,13 +45,13 @@ export type ToolHeaderProps = {
 );
 
 const statusLabels: Record<ToolPart["state"], string> = {
-  "approval-requested": "En attente",
-  "approval-responded": "Répondu",
-  "input-available": "En cours",
-  "input-streaming": "Prépare",
-  "output-available": "Terminé",
-  "output-denied": "Refusé",
-  "output-error": "Erreur",
+  "approval-requested": "Pending",
+  "approval-responded": "Responded",
+  "input-available": "Running",
+  "input-streaming": "Preparing",
+  "output-available": "Completed",
+  "output-denied": "Denied",
+  "output-error": "Error",
 };
 
 const statusIcons: Record<ToolPart["state"], ReactNode> = {
@@ -119,7 +119,7 @@ export type ToolInputProps = ComponentProps<"div"> & {
 export const ToolInput = ({ className, input, ...props }: ToolInputProps) => (
   <div className={cn("space-y-2 overflow-hidden", className)} {...props}>
     <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-      Paramètres
+      Parameters
     </h4>
     <div className="rounded-md bg-muted/50">
       <CodeBlock code={JSON.stringify(input, null, 2)} language="json" />
@@ -155,7 +155,7 @@ export const ToolOutput = ({
   return (
     <div className={cn("space-y-2", className)} {...props}>
       <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-        {errorText ? "Erreur" : "Résultat"}
+        {errorText ? "Error" : "Result"}
       </h4>
       <div
         className={cn(

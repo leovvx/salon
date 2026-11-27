@@ -1,7 +1,7 @@
-/** Durée lisible : 0,4 s · 12 s · 2 min · 2 min 05 s · 1 h 03. */
+/** Readable duration: 0.4 s · 12 s · 2 min · 2 min 05 s · 1 h 03. */
 export function fmtDur(secs?: number | null) {
   if (secs == null || !isFinite(secs) || secs < 0) return ""
-  if (secs < 10) return `${(Math.round(secs * 10) / 10).toLocaleString("fr-CH")} s`
+  if (secs < 10) return `${(Math.round(secs * 10) / 10).toLocaleString("en-US")} s`
   if (secs < 60) return `${Math.round(secs)} s`
   const s = Math.round(secs)
   if (s < 3600) {
@@ -12,7 +12,7 @@ export function fmtDur(secs?: number | null) {
   return `${h} h ${String(m).padStart(2, "0")}`
 }
 
-/** Chrono façon horloge : 0:04 · 2:15 · 1:02:03. */
+/** Clock-style timer: 0:04 · 2:15 · 1:02:03. */
 export function fmtClock(secs: number) {
   const s = Math.max(0, Math.floor(secs))
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60
